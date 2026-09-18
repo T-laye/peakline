@@ -1,0 +1,28 @@
+@import "@repo/ui/globals.css";
+
+/* Let Tailwind scan the shared UI package for the utility classes it uses,
+   since those components live in a separate workspace package. */
+@source "../../../../packages/ui/src/**/*.{ts,tsx}";
+
+/* Powers PoweredByStrip's marquee — the track renders its content twice and
+   slides exactly one copy-width to the left, so the loop point is invisible.
+   Landing-app-local (not `@repo/ui`): nothing else in the repo needs a
+   marquee yet. */
+@keyframes marquee {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+.animate-marquee {
+	animation: marquee 25s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.animate-marquee {
+		animation: none;
+	}
+}

@@ -8,7 +8,7 @@
 /* Peakline Figma file. Success/Danger/Warning reuse Tailwind's default     */
 /* green/red/yellow scales (that's what the Figma color styles are built    */
 /* from); Info is added on top for the "Processing" payment state, which    */
-/* the brief calls out but the palette doesn't cover.                      */
+/* the brief calls out but the palette doesn't cover.                  */
 /* ---------------------------------------------------------------------- */
 
 @theme inline {

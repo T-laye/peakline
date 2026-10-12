@@ -9,6 +9,9 @@ import {
 	Link2,
 	QrCode,
 	ArrowLeftRight,
+	Users,
+	GitCompareArrows,
+	BarChart3,
 	User,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
@@ -17,9 +20,10 @@ import { cn } from "@repo/ui/lib/utils";
 // Links cover "getting paid"; scanning to pay someone else isn't a
 // merchant flow) — "My QR Code" and "Payment Links" replace them. Profile
 // and Settings stay merged into one "Account", same as individual.
-// "Customers" removed entirely for now (was rendered disabled, `href:
-// null`, as a mock-only placeholder) — hidden rather than shown-but-dead
-// until there's a real screen behind it.
+// "Customers", "Reconciliation" and "Analytics" (2026-10-11 redesign) sit
+// between Transactions and Account, matching the new mock's sidebar order —
+// "Customers" has no design yet (only the nav slot is confirmed so far; see
+// its own route for the placeholder shown until one lands).
 export const MERCHANT_NAV_ITEMS = [
 	{ label: "Overview", href: "/", icon: LayoutGrid },
 	{ label: "Wallet", href: "/wallet", icon: Wallet },
@@ -27,6 +31,9 @@ export const MERCHANT_NAV_ITEMS = [
 	{ label: "Payment Links", href: "/payment-links", icon: Link2 },
 	{ label: "My QR Code", href: "/qr-code", icon: QrCode },
 	{ label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
+	{ label: "Customers", href: "/customers", icon: Users },
+	{ label: "Reconciliation", href: "/reconciliation", icon: GitCompareArrows },
+	{ label: "Analytics", href: "/analytics", icon: BarChart3 },
 	{ label: "Accounts", href: "/account", icon: User },
 ] as const;
 

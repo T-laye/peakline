@@ -100,6 +100,9 @@ export const apiRoutes = {
 
 	merchant: {
 		DASHBOARD_STATS: "/api/v1/merchant/dashboard/stats",
+		RECONCILIATION: "/api/v1/merchant/reconciliation",
+		RECONCILIATION_SUMMARY: "/api/v1/merchant/reconciliation/summary",
+		reconciliationById: (txId: string) => `/api/v1/merchant/reconciliation/${txId}`,
 	},
 
 	transfers: {

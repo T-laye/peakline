@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/lib/stores/authStore";
 import { useProfile } from "@/features/profile/hooks";
+import { useMyBusiness, useCreateBusinessWallet } from "@/features/business/hooks";
 import { refreshSession } from "@/lib/config/axios";
 
 /**
@@ -29,6 +30,18 @@ import { refreshSession } from "@/lib/config/axios";
  * request happens to fire first to 401) avoids `isAuthenticated` reading
  * `false` — and this session briefly looking logged out — purely because
  * of when, not whether, the tab happened to reload.
+ *
+ * A third: a merchant's own business can exist without its business
+ * wallet ever having been created — reported live, "merchant has not
+ * created wallet" on every payment attempt against an active, verified
+ * business. `useCompleteSignUp` now creates it at sign-up time, but that
+ * fix only covers accounts created after it shipped; any merchant whose
+ * business predates it is stuck the same way forever unless something
+ * retries it. `POST /businesses/{id}/wallet` tolerates already having one
+ * (409, handled inside `useCreateBusinessWallet`), so firing it once per
+ * business id, every time a merchant's own business loads, is a safe,
+ * invisible fix rather than a one-off migration someone has to remember to
+ * run.
  */
 function AuthProvider({ children }: { children: React.ReactNode }) {
 	const initializeAuth = useAuthStore((state) => state.initializeAuth);
@@ -52,6 +65,22 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 			setCustomerType(profile.customerType);
 		}
 	}, [profile, customerType, setCustomerType]);
+
+	const isMerchant = customerType === "merchant";
+	const { data: business } = useMyBusiness({ enabled: isInitialized && isAuthenticated && isMerchant });
+	const createBusinessWallet = useCreateBusinessWallet();
+	const walletCheckedForId = useRef<string | null>(null);
+
+	useEffect(() => {
+		if (!business?.id || walletCheckedForId.current === business.id) return;
+		walletCheckedForId.current = business.id;
+		createBusinessWallet.mutate(business.id);
+		// `createBusinessWallet` is a fresh mutation object every render (the
+		// usual TanStack Query shape) — depending on it would refire this on
+		// every unrelated re-render; the ref above is what actually guards
+		// against repeating the call for the same business.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [business?.id]);
 
 	return <>{children}</>;
 }

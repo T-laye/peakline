@@ -9,7 +9,6 @@ import {
 	Link2,
 	QrCode,
 	ArrowLeftRight,
-	Users,
 	GitCompareArrows,
 	BarChart3,
 	User,
@@ -20,10 +19,13 @@ import { cn } from "@repo/ui/lib/utils";
 // Links cover "getting paid"; scanning to pay someone else isn't a
 // merchant flow) — "My QR Code" and "Payment Links" replace them. Profile
 // and Settings stay merged into one "Account", same as individual.
-// "Customers", "Reconciliation" and "Analytics" (2026-10-11 redesign) sit
-// between Transactions and Account, matching the new mock's sidebar order —
-// "Customers" has no design yet (only the nav slot is confirmed so far; see
-// its own route for the placeholder shown until one lands).
+// "Reconciliation" and "Analytics" (2026-10-11 redesign) sit between
+// Transactions and Account, matching the new mock's sidebar order.
+// "Customers" dropped back out of the nav (2026-10-12) — the mock added
+// its slot before the screen behind it was ready; `/customers` itself
+// stays (still a real "Coming soon" page, not a 404) so a direct link
+// still works, it's just not advertised in the sidebar until there's a
+// real screen to show.
 export const MERCHANT_NAV_ITEMS = [
 	{ label: "Overview", href: "/", icon: LayoutGrid },
 	{ label: "Wallet", href: "/wallet", icon: Wallet },
@@ -31,7 +33,6 @@ export const MERCHANT_NAV_ITEMS = [
 	{ label: "Payment Links", href: "/payment-links", icon: Link2 },
 	{ label: "My QR Code", href: "/qr-code", icon: QrCode },
 	{ label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
-	{ label: "Customers", href: "/customers", icon: Users },
 	{ label: "Reconciliation", href: "/reconciliation", icon: GitCompareArrows },
 	{ label: "Analytics", href: "/analytics", icon: BarChart3 },
 	{ label: "Accounts", href: "/account", icon: User },

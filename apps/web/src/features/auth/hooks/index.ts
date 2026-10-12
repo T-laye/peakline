@@ -281,6 +281,18 @@ function useSubmitAccountType() {
  * failure here (or skipping it, if `phone` wasn't filled in) shouldn't fail
  * sign-up over one field that can still be added later from Account
  * Settings' Business Information tab.
+ *
+ * That same follow-up also provisions the business's own Stellar wallet
+ * (`POST /businesses/{id}/wallet`) — reported live: a merchant could sign
+ * up, verify, and create payment links successfully, yet every payment
+ * against them failed ("Merchant has not created a wallet for this
+ * business yet"), because nothing anywhere actually called this endpoint.
+ * `useSetupWallet`'s own `POST /wallets/stellar` (run right after this,
+ * during the PIN step) only ever creates the *person's* wallet — a
+ * business's payment links/QR deposit into its own separate one. Also
+ * best-effort for the same reason as the phone patch; `AuthProvider` backs
+ * this up with a self-heal check on every load for any merchant whose
+ * business predates this fix.
  */
 function useCompleteSignUp() {
 	const axiosAuth = useAxiosAuth();
@@ -317,20 +329,29 @@ function useCompleteSignUp() {
 				},
 			);
 
-			if (values.phone) {
-				try {
-					const { data: review } = await axiosAuth.get<
-						ApiSuccessResponse<MerchantOnboardingReviewData>
-					>(apiRoutes.onboarding.MERCHANT);
-					if (review.data.business) {
-						await axiosAuth.patch(
-							apiRoutes.businesses.byId(review.data.business.id),
-							{ phone: values.phone },
-						);
+			try {
+				const { data: review } = await axiosAuth.get<
+					ApiSuccessResponse<MerchantOnboardingReviewData>
+				>(apiRoutes.onboarding.MERCHANT);
+				const businessId = review.data.business?.id;
+				if (businessId) {
+					if (values.phone) {
+						await axiosAuth.patch(apiRoutes.businesses.byId(businessId), {
+							phone: values.phone,
+						});
 					}
-				} catch {
-					// Best-effort — see this hook's own doc comment.
+					try {
+						await axiosAuth.post(apiRoutes.businesses.byIdWallet(businessId));
+					} catch (walletError) {
+						// 409 ("each business gets exactly one") isn't a failure —
+						// same tolerant shape `useCreateBusinessWallet` uses.
+						if (!isAxiosError(walletError) || walletError.response?.status !== 409) {
+							throw walletError;
+						}
+					}
 				}
+			} catch {
+				// Best-effort — see this hook's own doc comment.
 			}
 
 			return data;

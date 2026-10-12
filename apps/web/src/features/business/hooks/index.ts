@@ -1,7 +1,8 @@
+import { isAxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAxiosAuth } from "@/hooks/useAxiosAuth";
 import { apiRoutes } from "@/lib/config/apiRoutes";
-import type { ApiSuccessResponse, BusinessData } from "@/lib/api/types";
+import type { ApiSuccessResponse, BusinessData, StellarWalletData } from "@/lib/api/types";
 import type { UpdateBusinessValues } from "@/lib/validations/businessValidations";
 
 const MY_BUSINESS_KEY = ["business", "mine"];
@@ -94,4 +95,48 @@ function useDeleteBusiness(id: string) {
 	});
 }
 
-export { useMyBusiness, useCreateBusiness, useUpdateBusiness, useDeleteBusiness };
+/**
+ * `POST /businesses/{id}/wallet` — a real, confirmed-live endpoint that
+ * nothing in this app ever called (see `apiRoutes.businesses.byIdWallet`'s
+ * own "not called anywhere right now" note). Reported live: a merchant
+ * could sign up, verify, and create payment links with an active business
+ * the whole time, yet every payment against it failed with "Merchant has
+ * not created a wallet for this business yet" — because nothing ever
+ * actually created one. `POST /wallets/stellar` (`useSetupWallet`, during
+ * sign-up) only ever provisions the *person's own* wallet; a business's
+ * payment links/QR deposit into its own separate wallet, which this is the
+ * only way to create.
+ *
+ * 409 ("each business gets exactly one") is treated as success, not an
+ * error — same tolerant-of-already-exists shape `useSetupWallet` already
+ * uses for the personal wallet, so this is safe to call speculatively
+ * (sign-up, or a self-heal check on every load — see `AuthProvider`)
+ * without first checking whether one exists.
+ */
+function useCreateBusinessWallet() {
+	const axiosAuth = useAxiosAuth();
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (businessId: string) => {
+			try {
+				const { data } = await axiosAuth.post<ApiSuccessResponse<StellarWalletData>>(
+					apiRoutes.businesses.byIdWallet(businessId),
+				);
+				return data.data;
+			} catch (error) {
+				if (isAxiosError(error) && error.response?.status === 409) return null;
+				throw error;
+			}
+		},
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: MY_BUSINESS_KEY }),
+	});
+}
+
+export {
+	useMyBusiness,
+	useCreateBusiness,
+	useUpdateBusiness,
+	useDeleteBusiness,
+	useCreateBusinessWallet,
+};

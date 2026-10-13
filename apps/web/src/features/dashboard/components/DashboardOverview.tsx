@@ -8,6 +8,7 @@ import { RecentTransactions } from "@/features/dashboard/components/RecentTransa
 import { MerchantStatsCards } from "@/features/merchant/components/MerchantStatsCards";
 import { MerchantQuickActions } from "@/features/merchant/components/MerchantQuickActions";
 import { TotalReceivedChart } from "@/features/merchant/components/TotalReceivedChart";
+import { TransactionTrendChart } from "@/features/merchant/components/TransactionTrendChart";
 import { RecentPaymentsSection } from "@/features/merchant/components/RecentPaymentsSection";
 
 /**
@@ -21,8 +22,9 @@ import { RecentPaymentsSection } from "@/features/merchant/components/RecentPaym
  * stat cards desktop already had): `MerchantStatsCards` is now the same on
  * both breakpoints, its own `grid-cols-1 sm:grid-cols-3` already stacking
  * cleanly into three full-width cards on a narrow screen with no separate
- * mobile treatment needed. Both breakpoints still get the "Total Received"
- * trend chart and the paginated "Recent Payments" table/cards below Quick
+ * mobile treatment needed. Both breakpoints get the "Total Received" and
+ * "Transaction Trend" charts side by side (2026-10-11 redesign; stacked on
+ * mobile) and the paginated "Recent Payments" table/cards below Quick
  * Actions.
  */
 function DashboardOverview() {
@@ -41,7 +43,10 @@ function DashboardOverview() {
 						<MerchantQuickActions />
 					</div>
 
-					<TotalReceivedChart />
+					<div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+						<TotalReceivedChart />
+						<TransactionTrendChart />
+					</div>
 					<RecentPaymentsSection />
 				</>
 			) : (

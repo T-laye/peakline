@@ -453,6 +453,66 @@ export interface MerchantDashboardStatsData {
 	chart: DashboardChartData;
 }
 
+/** `reconciliationStatus` on `ReconciliationData` — confirmed live via
+ * `GET /merchant/reconciliation`. Distinct from the transaction's own
+ * `status` (pending/processing/completed/failed/reversed): a still-settling
+ * deposit has no reconciliation verdict yet at all, it isn't a 5th value of
+ * this enum — see `deriveReconciliationStatus`. */
+export type ReconciliationStatus = "matched" | "unmatched" | "failed" | "amount_mismatch";
+
+export interface ReconciliationPaymentLinkData {
+	id: string;
+	title: string;
+	expectedAmount: string;
+	publicCode: string;
+}
+
+export interface ReconciliationFundingIntentData {
+	id: string;
+	expectedAmount: string;
+	memo: string;
+}
+
+/** `GET /merchant/reconciliation`, `GET /merchant/reconciliation/{txId}` —
+ * confirmed live. One deposit transaction plus whatever it matched against.
+ * Neither `paymentLink` nor `fundingIntent` carries a customer name or
+ * identity — a payer is only ever a wallet address (`externalAddress`) or,
+ * for an internal Peakline-to-Peakline deposit, resolvable via the
+ * transaction's own `counterparty` (not included in this DTO; cross-
+ * reference `TransactionData` by `transactionId` if that's ever needed). */
+export interface ReconciliationData {
+	transactionId: string;
+	amount: string;
+	currency: string;
+	status: TransactionLedgerStatus;
+	reconciliationStatus: ReconciliationStatus;
+	stellarTxHash?: string | null;
+	externalAddress?: string | null;
+	failureReason?: string | null;
+	createdAt: string;
+	completedAt?: string | null;
+	paymentLink?: ReconciliationPaymentLinkData | null;
+	fundingIntent?: ReconciliationFundingIntentData | null;
+}
+
+/** `GET /merchant/reconciliation/summary` — confirmed live. Counts only, no
+ * amount totals — there's no single call that sums e.g. every matched
+ * deposit's amount (see `MerchantStatsCards`'s own note on the same gap
+ * showing up elsewhere). */
+export interface ReconciliationSummaryData {
+	matched: number;
+	unmatched: number;
+	amountMismatch: number;
+	failed: number;
+	total: number;
+}
+
+export interface ReconciliationQuery {
+	status?: ReconciliationStatus;
+	from?: string;
+	to?: string;
+}
+
 export interface PaymentLinkBusinessData {
 	id: string;
 	name: string;

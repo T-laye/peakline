@@ -23,15 +23,20 @@ import type { PublicPaymentLinkData } from "@/lib/api/types";
 interface ExternalWalletAddressStepProps {
 	link: PublicPaymentLinkData;
 	defaultAddress?: string | null;
+	/** True while the claim for this address is being registered. */
+	loading?: boolean;
 	onContinue: (senderAddress: string) => void;
 }
 
-/** Step 1: the payer's own external Stellar wallet. This is the address
- * the payment will come *from*, so verification can match the on-chain
- * transaction's source, not just its amount and destination. */
+/** Step 1: the payer's own external Stellar wallet — the address the
+ * payment will come *from*. Submitting it registers a claim
+ * (`POST /pay/{code}/claim`) that step 2's transaction hash is verified
+ * against, so the on-chain source is checked too, not just amount and
+ * destination. */
 function ExternalWalletAddressStep({
 	link,
 	defaultAddress,
+	loading,
 	onContinue,
 }: ExternalWalletAddressStepProps) {
 	const schema = useMemo(
@@ -84,7 +89,7 @@ function ExternalWalletAddressStep({
 							)}
 						/>
 
-						<Button type="submit" size="large" className="w-full">
+						<Button type="submit" size="large" className="w-full" loading={loading}>
 							Continue
 						</Button>
 					</form>

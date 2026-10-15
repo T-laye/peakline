@@ -9,9 +9,10 @@ export default function ExternalPaymentVerifiedPage() {
 	const router = useRouter();
 	const link = usePayFlowStore((state) => state.link);
 	const verification = usePayFlowStore((state) => state.verification);
+	const txHash = usePayFlowStore((state) => state.externalTxHash);
 	const reset = usePayFlowStore((state) => state.reset);
 
-	const ready = link && verification?.status === "verified";
+	const ready = link && verification?.status === "settled";
 
 	useEffect(() => {
 		if (!ready) router.replace("/pay");
@@ -22,7 +23,8 @@ export default function ExternalPaymentVerifiedPage() {
 	return (
 		<ExternalPaymentVerifiedStep
 			link={link}
-			verification={verification}
+			claim={verification}
+			txHash={txHash ?? ""}
 			onGoToDashboard={() => {
 				reset();
 				router.push("/");

@@ -22,9 +22,3 @@ export function truncateMiddle(value: string, head = 6, tail = 6): string {
 	if (value.length <= head + tail + 1) return value;
 	return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
-
-/** Public block explorer for a Stellar transaction — testnet, matching the
- * network the whole app runs on. */
-export function stellarExplorerTxUrl(txHash: string): string {
-	return `https://stellar.expert/explorer/testnet/tx/${txHash}`;
-}

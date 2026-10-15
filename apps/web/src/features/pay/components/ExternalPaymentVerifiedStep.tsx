@@ -5,24 +5,33 @@ import { Button } from "@repo/ui/button";
 import { MerchantAvatar } from "@/features/pay/components/MerchantAvatar";
 import { CopyableDetailRow } from "@/features/pay/components/CopyableDetailRow";
 import { formatUsdc, usdcToGhs } from "@/lib/currency";
-import { stellarExplorerTxUrl, truncateMiddle } from "@/lib/pay";
-import type { ExternalPaymentVerificationData, PublicPaymentLinkData } from "@/lib/api/types";
+import { truncateMiddle } from "@/lib/pay";
+import { stellarExplorerUrl } from "@/lib/stellar";
+import type { PaymentLinkClaimData, PublicPaymentLinkData } from "@/lib/api/types";
 
 interface ExternalPaymentVerifiedStepProps {
 	link: PublicPaymentLinkData;
-	verification: ExternalPaymentVerificationData;
+	claim: PaymentLinkClaimData;
+	/** What the payer submitted — fallback if the claim doesn't echo it. */
+	txHash: string;
 	onGoToDashboard: () => void;
 }
 
 /** Same layout as `PaymentSuccessStep`, but with no New Balance card: the
  * money left an external wallet, so the payer's Peakline balance hasn't
- * changed. Shows the on-chain proof instead (sender + hash + explorer). */
+ * changed. Shows the on-chain proof instead (sender + hash + explorer).
+ *
+ * The amount shown is the link's *requested* amount: the settled claim
+ * carries no amount of its own. If the payer sent a different amount it
+ * still settles, and the merchant sees it flagged in Reconciliation. */
 function ExternalPaymentVerifiedStep({
 	link,
-	verification,
+	claim,
+	txHash,
 	onGoToDashboard,
 }: ExternalPaymentVerifiedStepProps) {
-	const amount = Number(verification.receivedAmount);
+	const amount = Number(link.amount);
+	const hash = claim.txHash || txHash;
 
 	return (
 		<div className="flex min-h-full flex-col items-center justify-center gap-6 py-2 text-center sm:py-4">
@@ -37,10 +46,10 @@ function ExternalPaymentVerifiedStep({
 			<div className="flex flex-col gap-1">
 				<h2 className="text-s1 text-foreground sm:text-h5">Payment Verified!</h2>
 				<p className="text-b4 text-muted-foreground sm:text-b3">
-					Your external wallet payment was confirmed
+					Your external wallet payment to {link.businessName} was confirmed
 				</p>
 				<p className="text-h5 text-foreground sm:text-h4">
-					{formatUsdc(amount)} {verification.currency}
+					{formatUsdc(amount)} {link.currency}
 				</p>
 				<p className="text-b4 text-muted-foreground sm:text-b3">
 					~ GHS {formatUsdc(usdcToGhs(amount))}
@@ -58,16 +67,16 @@ function ExternalPaymentVerifiedStep({
 			<div className="flex w-full flex-col gap-4 rounded-xl border border-secondary-300 bg-secondary-100 p-4 text-left sm:p-5">
 				<CopyableDetailRow
 					label="Paid from"
-					value={truncateMiddle(verification.senderAddress, 8, 8)}
-					copyValue={verification.senderAddress}
+					value={truncateMiddle(claim.fromAddress, 8, 8)}
+					copyValue={claim.fromAddress}
 				/>
 				<CopyableDetailRow
 					label="Transaction hash"
-					value={truncateMiddle(verification.stellarTxHash, 10, 10)}
-					copyValue={verification.stellarTxHash}
+					value={truncateMiddle(hash, 10, 10)}
+					copyValue={hash}
 				/>
 				<a
-					href={stellarExplorerTxUrl(verification.stellarTxHash)}
+					href={stellarExplorerUrl(hash)}
 					target="_blank"
 					rel="noopener noreferrer"
 					className="inline-flex items-center gap-1.5 self-start text-b4 font-medium text-primary-600 hover:underline"

@@ -4,7 +4,7 @@ import { apiRoutes } from "@/lib/config/apiRoutes";
 import { extractPaymentCode } from "@/lib/pay";
 import type {
 	ApiSuccessResponse,
-	ExternalPaymentVerificationData,
+	PaymentLinkClaimData,
 	PublicPaymentLinkData,
 } from "@/lib/api/types";
 
@@ -23,67 +23,63 @@ function usePaymentLinkLookup() {
 			const { data } = await axiosAuth.get<ApiSuccessResponse<PublicPaymentLinkData>>(
 				apiRoutes.pay.byCode(code),
 			);
+			return { ...data.data, publicCode: code };
+		},
+	});
+}
+
+/** The code the claim endpoints are keyed by. `memo` is documented as equal
+ * to the code, so it's a safe fallback if `publicCode` wasn't attached. */
+function claimCode(link: PublicPaymentLinkData) {
+	return link.publicCode ?? link.memo;
+}
+
+/** Step 1 of paying from an external wallet — registers the sender
+ * address against the link and returns the claim the hash is verified
+ * against in step 2. */
+function useCreatePaymentClaim() {
+	const axiosAuth = useAxiosAuth();
+
+	return useMutation({
+		mutationFn: async ({
+			link,
+			fromAddress,
+		}: {
+			link: PublicPaymentLinkData;
+			fromAddress: string;
+		}) => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<PaymentLinkClaimData>>(
+				apiRoutes.pay.claim(claimCode(link)),
+				{ fromAddress },
+			);
 			return data.data;
 		},
 	});
 }
 
-interface VerifyExternalPaymentInput {
-	link: PublicPaymentLinkData;
-	senderAddress: string;
-	txHash: string;
-}
+/** Step 2 — submits the tx hash; the backend checks it on Horizon and
+ * settles the claim. Any failed check is a 400 with a real reason in
+ * `message`; see `PaymentLinkClaimData` for the full contract. */
+function useVerifyPaymentClaim() {
+	const axiosAuth = useAxiosAuth();
 
-async function fakeRequest<T>(payload: T, delay = 1800): Promise<T> {
-	await new Promise((resolve) => setTimeout(resolve, delay));
-	return payload;
-}
-
-/**
- * Verifies a payment the payer made from an external Stellar wallet against
- * the payment link they were paying.
- *
- * STUBBED — the backend endpoint doesn't exist yet. When it lands, add it
- * to `apiRoutes.pay` and swap this `mutationFn` for the real call (likely
- * `POST` with `{ code: link.memo, senderAddress, txHash }`). Nothing in
- * the components needs to change as long as the response matches
- * `ExternalPaymentVerificationData` — adjust that type if it doesn't.
- *
- * Until then, the hash's LAST character picks the outcome, so every screen
- * can be reached by hand:
- *   - ends in `0` → transaction not found (error → /pay/external/failed)
- *   - ends in `1` → underpaid amount (→ /pay/external/reconciliation)
- *   - ends in `2` → memo missing/wrong (→ /pay/external/reconciliation)
- *   - anything else → verified (→ /pay/external/verified)
- */
-function useVerifyExternalPayment() {
 	return useMutation({
-		mutationFn: async ({ link, senderAddress, txHash }: VerifyExternalPaymentInput) => {
-			const outcome = txHash.at(-1);
-			if (outcome === "0") {
-				await fakeRequest(null);
-				throw new Error("Transaction not found");
-			}
-
-			const expected = Number(link.amount);
-			const received = outcome === "1" ? expected * 0.8 : expected;
-			const issues: ExternalPaymentVerificationData["issues"] =
-				outcome === "1" ? ["amount_mismatch"] : outcome === "2" ? ["memo_mismatch"] : [];
-
-			return fakeRequest<ExternalPaymentVerificationData>({
-				status: issues.length > 0 ? "needs_reconciliation" : "verified",
-				stellarTxHash: txHash,
-				senderAddress,
-				expectedAmount: expected.toFixed(2),
-				receivedAmount: received.toFixed(2),
-				currency: "USDC",
-				issues,
-				reconciliationReference:
-					issues.length > 0 ? `REC-${txHash.slice(0, 8).toUpperCase()}` : null,
-				verifiedAt: new Date().toISOString(),
-			});
+		mutationFn: async ({
+			link,
+			claimId,
+			txHash,
+		}: {
+			link: PublicPaymentLinkData;
+			claimId: string;
+			txHash: string;
+		}) => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<PaymentLinkClaimData>>(
+				apiRoutes.pay.claimVerify(claimCode(link), claimId),
+				{ txHash },
+			);
+			return data.data;
 		},
 	});
 }
 
-export { usePaymentLinkLookup, useVerifyExternalPayment };
+export { usePaymentLinkLookup, useCreatePaymentClaim, useVerifyPaymentClaim };

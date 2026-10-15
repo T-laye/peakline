@@ -2,40 +2,50 @@
 
 import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
-import { useVerifyExternalPayment } from "@/features/pay/hooks";
+import { useVerifyPaymentClaim } from "@/features/pay/hooks";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
 import { formatUsdc } from "@/lib/currency";
-import type { ExternalPaymentVerificationData, PublicPaymentLinkData } from "@/lib/api/types";
+import type { PaymentLinkClaimData, PublicPaymentLinkData } from "@/lib/api/types";
 
 interface ExternalPaymentVerifyingStepProps {
 	link: PublicPaymentLinkData;
-	senderAddress: string;
+	claimId: string;
 	txHash: string;
-	onResult: (verification: ExternalPaymentVerificationData) => void;
+	onResult: (claim: PaymentLinkClaimData) => void;
 	onError: (message: string) => void;
 }
 
-/** Fires the verification once on mount, same shape as
- * `PaymentProcessingStep`. A transaction that's found but doesn't tally
- * still counts as a result (`needs_reconciliation`), not an error; only
- * a missing or invalid transaction lands in `onError`. */
+/** Submits the hash against the claim once on mount, same shape as
+ * `PaymentProcessingStep`. Only a `settled` claim is a success; every
+ * failed check comes back as a 400 whose `message` says which one (wrong
+ * sender, not USDC, not found on Horizon...), shown as-is on the failed
+ * screen. */
 function ExternalPaymentVerifyingStep({
 	link,
-	senderAddress,
+	claimId,
 	txHash,
 	onResult,
 	onError,
 }: ExternalPaymentVerifyingStepProps) {
-	const verify = useVerifyExternalPayment();
+	const verify = useVerifyPaymentClaim();
 	const started = useRef(false);
 
 	useEffect(() => {
 		if (started.current) return;
 		started.current = true;
 		verify.mutate(
-			{ link, senderAddress, txHash },
+			{ link, claimId, txHash },
 			{
-				onSuccess: (result) => onResult(result),
+				onSuccess: (claim) => {
+					if (claim.status !== "settled") {
+						onError(
+							claim.failureReason ||
+								"This payment couldn't be confirmed yet. Check the hash and try again.",
+						);
+						return;
+					}
+					onResult(claim);
+				},
 				onError: (error) =>
 					onError(
 						getApiErrorMessage(

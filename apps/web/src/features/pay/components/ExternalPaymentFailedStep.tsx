@@ -7,18 +7,25 @@ import type { PublicPaymentLinkData } from "@/lib/api/types";
 interface ExternalPaymentFailedStepProps {
 	link: PublicPaymentLinkData;
 	errorMessage: string;
+	/** True while a fresh claim is being registered for the retry. */
+	retrying?: boolean;
 	onTryAgain: () => void;
+	onChangeWallet: () => void;
 	onGoToDashboard: () => void;
 }
 
-/** The hash couldn't be verified at all (not found, wrong network, etc.).
- * This is not a mismatch; that case goes to reconciliation. Same shape as
- * `PaymentFailedStep`. "Try Again" returns to the hash step with the
- * previous hash pre-filled, since a typo is the likeliest cause. */
+/** The backend rejected the transaction (not found on Horizon, not USDC,
+ * sent from a different wallet than the one entered, already credited...).
+ * `errorMessage` is its own reason. Same shape as `PaymentFailedStep`.
+ * "Try Again" returns to the hash step with the previous hash pre-filled,
+ * since a typo is the likeliest cause; "Use a different wallet" covers
+ * having paid from another address. */
 function ExternalPaymentFailedStep({
 	link,
 	errorMessage,
+	retrying,
 	onTryAgain,
+	onChangeWallet,
 	onGoToDashboard,
 }: ExternalPaymentFailedStepProps) {
 	return (
@@ -40,9 +47,25 @@ function ExternalPaymentFailedStep({
 			</div>
 
 			<div className="flex w-full flex-col items-center gap-4">
-				<Button type="button" size="large" className="w-full" onClick={onTryAgain}>
+				<Button
+					type="button"
+					size="large"
+					className="w-full"
+					loading={retrying}
+					onClick={onTryAgain}
+				>
 					<RefreshCw className="size-4" aria-hidden="true" />
 					Try Again
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					size="large"
+					className="w-full"
+					disabled={retrying}
+					onClick={onChangeWallet}
+				>
+					Use a different wallet
 				</Button>
 				<button
 					type="button"

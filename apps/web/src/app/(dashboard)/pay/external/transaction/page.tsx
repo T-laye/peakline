@@ -10,15 +10,16 @@ export default function ExternalTransactionPage() {
 	const router = useRouter();
 	const link = usePayFlowStore((state) => state.link);
 	const senderAddress = usePayFlowStore((state) => state.externalSenderAddress);
+	const claimId = usePayFlowStore((state) => state.externalClaimId);
 	const txHash = usePayFlowStore((state) => state.externalTxHash);
 	const setTxHash = usePayFlowStore((state) => state.setExternalTxHash);
 
 	useEffect(() => {
 		if (!link) router.replace("/pay");
-		else if (!senderAddress) router.replace("/pay/external");
-	}, [link, senderAddress, router]);
+		else if (!senderAddress || !claimId) router.replace("/pay/external");
+	}, [link, senderAddress, claimId, router]);
 
-	if (!link || !senderAddress) return null;
+	if (!link || !senderAddress || !claimId) return null;
 
 	return (
 		<div className="flex flex-col gap-6 sm:gap-8">

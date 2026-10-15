@@ -88,8 +88,9 @@ function ExternalTransactionStep({
 					</div>
 
 					<Alert variant="warning">
-						Include the memo and send the exact amount. If anything doesn&apos;t match,
-						your payment will need to be reconciled by hand before it&apos;s confirmed.
+						Send USDC from the wallet you entered, to this exact address, with the
+						memo. A different amount still goes through, but the merchant will have to
+						reconcile it.
 					</Alert>
 				</div>
 

@@ -8,29 +8,25 @@ import { usePayFlowStore } from "@/features/pay/store/payFlowStore";
 export default function ExternalPaymentVerifyingPage() {
 	const router = useRouter();
 	const link = usePayFlowStore((state) => state.link);
-	const senderAddress = usePayFlowStore((state) => state.externalSenderAddress);
+	const claimId = usePayFlowStore((state) => state.externalClaimId);
 	const txHash = usePayFlowStore((state) => state.externalTxHash);
 	const setVerification = usePayFlowStore((state) => state.setVerification);
 	const setErrorMessage = usePayFlowStore((state) => state.setErrorMessage);
 
 	useEffect(() => {
-		if (!link || !senderAddress || !txHash) router.replace("/pay");
-	}, [link, senderAddress, txHash, router]);
+		if (!link || !claimId || !txHash) router.replace("/pay");
+	}, [link, claimId, txHash, router]);
 
-	if (!link || !senderAddress || !txHash) return null;
+	if (!link || !claimId || !txHash) return null;
 
 	return (
 		<ExternalPaymentVerifyingStep
 			link={link}
-			senderAddress={senderAddress}
+			claimId={claimId}
 			txHash={txHash}
-			onResult={(verification) => {
-				setVerification(verification);
-				router.replace(
-					verification.status === "verified"
-						? "/pay/external/verified"
-						: "/pay/external/reconciliation",
-				);
+			onResult={(claim) => {
+				setVerification(claim);
+				router.replace("/pay/external/verified");
 			}}
 			onError={(message) => {
 				setErrorMessage(message);

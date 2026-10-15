@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { Check, Clock, RefreshCw, X, Ban, Copy } from "lucide-react";
+import { Alert } from "@repo/ui/alert";
 import { toast } from "@repo/ui/sonner";
 import { UserAvatar } from "@/features/dashboard/components/UserAvatar";
 import {
 	STATUS_LABEL,
 	METHOD_LABEL,
+	hasAmountMismatch,
 	transactionNoun,
 	transactionCounterpartyLabel,
 	transactionCounterpartyFieldLabel,
@@ -73,6 +76,25 @@ function TransactionDetail({ transaction }: { transaction: TransactionData }) {
 					{transactionNoun(transaction)} {headingSuffix}
 				</h2>
 			</div>
+
+			{/* Only ever set on a merchant's payment-link deposit, which is
+			    exactly what /reconciliation/{id} covers (same id). */}
+			{hasAmountMismatch(transaction) && (
+				<Alert variant="warning">
+					This payment was credited, but the amount differs from what the payment link
+					requested.{" "}
+					<Link
+						href={`/reconciliation/${transaction.id}`}
+						className="font-semibold underline underline-offset-2"
+					>
+						Review in Reconciliation
+					</Link>
+				</Alert>
+			)}
+
+			{transaction.status === "failed" && transaction.failureReason && (
+				<Alert variant="error">{transaction.failureReason}</Alert>
+			)}
 
 			<div className="flex flex-col gap-1 rounded-xl border border-secondary-300 bg-secondary-100 p-4 sm:p-5">
 				<span className="text-h5 text-foreground sm:text-h4">

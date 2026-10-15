@@ -98,20 +98,24 @@ function StatCard({
  * — the comparison label under each stat reflects what it's actually
  * compared against ("vs previous month" / "vs yesterday").
  *
- * Five cards, not three — `totalSent`/`todaySent` (real as of 2026-09-13)
- * mean a merchant's money-out is now as visible as its money-in, paired up
- * (Total Received/Total Sent, Today's Payments/Today's Sent) so the two
- * directions read side by side; Pending stays last, its own thing (a count
- * of transactions still in flight, not a received/sent split).
+ * Back to three cards (2026-10-11 redesign) — the new mock's middle card is
+ * labelled "Confirmed Payments" with a transaction count underneath
+ * ("From 102 Transactions"), matching the same shape as `Pending`. No real
+ * endpoint pairs an amount with a transaction count for anything but
+ * `pending`, though — `totalReceived`/`todaysPayments`/etc. only ever carry
+ * `amount` + `changePct` (confirmed against the live API). Rather than
+ * invent a count the backend doesn't give us, this keeps the card backed by
+ * a real field (`todaysPayments`) and its own real comparison, labelled for
+ * what it actually is. `totalSent`/`todaySent` still exist on the data layer
+ * (`useMerchantOverview`) for whenever a screen needs the outflow side —
+ * just not shown here now that the mock dropped them from Overview.
  */
 function MerchantStatsCards() {
 	const { data } = useMerchantOverview();
 
 	if (!data) {
 		return (
-			<div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-				<StatCardSkeleton />
-				<StatCardSkeleton />
+			<div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 				<StatCardSkeleton />
 				<StatCardSkeleton />
 				<StatCardSkeleton />
@@ -120,7 +124,7 @@ function MerchantStatsCards() {
 	}
 
 	return (
-		<div className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+		<div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 			<StatCard
 				label="Total Received"
 				amount={data.totalReceived}
@@ -129,25 +133,11 @@ function MerchantStatsCards() {
 				changeLabel={data.totalReceivedChangeLabel}
 			/>
 			<StatCard
-				label="Total Sent"
-				amount={data.totalSent}
-				currency={data.currency}
-				pct={data.totalSentChangePct}
-				changeLabel={data.totalSentChangeLabel}
-			/>
-			<StatCard
 				label="Today's Payments"
 				amount={data.todaysPayments}
 				currency={data.currency}
 				pct={data.todaysPaymentsChangePct}
 				changeLabel={data.todaysPaymentsChangeLabel}
-			/>
-			<StatCard
-				label="Today's Sent"
-				amount={data.todaySent}
-				currency={data.currency}
-				pct={data.todaySentChangePct}
-				changeLabel={data.todaySentChangeLabel}
 			/>
 
 			<div className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border bg-background p-5 sm:p-6">

@@ -11,6 +11,9 @@ import type {
 	PaymentLinkData,
 	PaymentLinkStatsData,
 	PaymentLinkStatus,
+	ReconciliationData,
+	ReconciliationQuery,
+	ReconciliationSummaryData,
 } from "@/lib/api/types";
 import type { CreatePaymentLinkValues } from "@/lib/validations/paymentLinksValidations";
 
@@ -303,6 +306,62 @@ function useExportPaymentLinksCsv() {
 	});
 }
 
+const RECONCILIATION_KEY = ["merchant", "reconciliation"];
+
+/** `GET /merchant/reconciliation` — confirmed live. Server-side paginated +
+ * filtered by status/date range, same envelope shape as payment links
+ * (`data` a flat array, `meta` alongside it). */
+function useReconciliation(query: ReconciliationQuery, page: number, limit: number) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: [...RECONCILIATION_KEY, query, page, limit],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<
+				ApiSuccessResponse<ReconciliationData[]> & { meta: PaginationMeta }
+			>(apiRoutes.merchant.RECONCILIATION, { params: { ...query, page, limit } });
+			return { records: data.data, meta: data.meta };
+		},
+	});
+}
+
+/** `GET /merchant/reconciliation/summary` — confirmed live. Counts across
+ * every business the merchant owns, not scoped by the list's own filters
+ * (no query params on the real endpoint) — same "summary cards don't move
+ * when you filter the table" behavior the dashboard stats already have. */
+function useReconciliationSummary() {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: [...RECONCILIATION_KEY, "summary"],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<ReconciliationSummaryData>>(
+				apiRoutes.merchant.RECONCILIATION_SUMMARY,
+			);
+			return data.data;
+		},
+	});
+}
+
+/** `GET /merchant/reconciliation/{txId}` — confirmed live. Keyed by the
+ * underlying transaction's own id, not a separate "reconciliation record
+ * id" (there isn't one — a reconciliation record is just a deposit
+ * transaction plus its derived match). */
+function useReconciliationRecord(txId: string) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: [...RECONCILIATION_KEY, txId],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<ReconciliationData>>(
+				apiRoutes.merchant.reconciliationById(txId),
+			);
+			return data.data;
+		},
+		enabled: !!txId,
+	});
+}
+
 export {
 	useMerchantOverview,
 	useAccountDisplayName,
@@ -312,6 +371,9 @@ export {
 	useCreatePaymentLink,
 	useCancelPaymentLink,
 	useExportPaymentLinksCsv,
+	useReconciliation,
+	useReconciliationSummary,
+	useReconciliationRecord,
 	useReceivedTrend,
 };
 export type { MerchantOverviewData, ReceivedTrendPoint, PaymentLinkStatus };

@@ -519,6 +519,37 @@ export interface PublicPaymentLinkData {
 	recipientRoleLabel?: string;
 }
 
+/** What didn't line up between an external-wallet Stellar transaction and
+ * the payment link it was submitted against. PROVISIONAL — no backend
+ * endpoint exists yet (see `useVerifyExternalPayment`); rename to match the
+ * real response once it lands. */
+export type ExternalPaymentIssue =
+	| "amount_mismatch"
+	| "memo_mismatch"
+	| "destination_mismatch"
+	| "sender_mismatch"
+	| "asset_mismatch";
+
+/** Result of verifying a payment made from an external (non-Peakline)
+ * Stellar wallet against a payment link. `verified` = the on-chain
+ * transaction matches the link exactly; `needs_reconciliation` = it was
+ * found but something doesn't tally (see `issues`), so it's been flagged
+ * for review rather than accepted or rejected outright. A hash that can't
+ * be found at all is an error response, not one of these. PROVISIONAL
+ * shape — see `ExternalPaymentIssue`. */
+export interface ExternalPaymentVerificationData {
+	status: "verified" | "needs_reconciliation";
+	stellarTxHash: string;
+	senderAddress: string;
+	expectedAmount: string;
+	receivedAmount: string;
+	currency: "USDC";
+	issues: ExternalPaymentIssue[];
+	/** Set only when `status` is `needs_reconciliation`. */
+	reconciliationReference: string | null;
+	verifiedAt: string;
+}
+
 /** `internal` = pure ledger transfer between Peakline users, settled
  * instantly with no on-chain fee. `external` = an on-chain Stellar send to
  * a non-Peakline address. */

@@ -1,5 +1,6 @@
 "use client";
 
+import { Wallet } from "lucide-react";
 import { Button } from "@repo/ui/button";
 import { MerchantAvatar } from "@/features/pay/components/MerchantAvatar";
 import { formatUsdc, usdcToGhs } from "@/lib/currency";
@@ -8,6 +9,9 @@ import type { PublicPaymentLinkData } from "@/lib/api/types";
 interface PaymentLinkPreviewCardProps {
 	link: PublicPaymentLinkData | null;
 	onContinue: () => void;
+	/** Pay from a Stellar wallet outside Peakline instead of the payer's own
+	 * balance; see `/pay/external`. */
+	onPayExternal: () => void;
 	onChangeCode: () => void;
 }
 
@@ -22,7 +26,12 @@ const STATUS_MESSAGE: Record<"expired" | "cancelled", string> = {
  * returns (no free-form "pay this merchant X" endpoint exists). `min-h-full`
  * keeps its height matching the code-entry card next to it on desktop,
  * empty state or not. */
-function PaymentLinkPreviewCard({ link, onContinue, onChangeCode }: PaymentLinkPreviewCardProps) {
+function PaymentLinkPreviewCard({
+	link,
+	onContinue,
+	onPayExternal,
+	onChangeCode,
+}: PaymentLinkPreviewCardProps) {
 	if (!link) {
 		return (
 			<div className="flex min-h-full flex-col items-center justify-center gap-4 rounded-2xl border border-secondary-300 bg-secondary-100 p-6 text-center sm:p-8">
@@ -72,6 +81,17 @@ function PaymentLinkPreviewCard({ link, onContinue, onChangeCode }: PaymentLinkP
 					onClick={onContinue}
 				>
 					Continue
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					size="large"
+					className="w-full bg-background"
+					disabled={!payable}
+					onClick={onPayExternal}
+				>
+					<Wallet className="size-4" aria-hidden="true" />
+					Pay with external wallet
 				</Button>
 				<button
 					type="button"

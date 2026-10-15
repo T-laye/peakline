@@ -15,3 +15,10 @@ export function extractPaymentCode(input: string): string {
 		return trimmed;
 	}
 }
+
+/** `abcd1234…wxyz` — long hashes/addresses in tight rows, where the full
+ * value is still one tap away via a copy button. */
+export function truncateMiddle(value: string, head = 6, tail = 6): string {
+	if (value.length <= head + tail + 1) return value;
+	return `${value.slice(0, head)}…${value.slice(-tail)}`;
+}

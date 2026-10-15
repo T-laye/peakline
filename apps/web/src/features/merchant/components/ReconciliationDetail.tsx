@@ -8,6 +8,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { toast } from "@repo/ui/sonner";
 import {
 	displayReconciliationStatus,
+	reconciliationDifference,
 	reconciliationExpectedAmount,
 	reconciliationMethodLabel,
 	reconciliationRequestId,
@@ -30,7 +31,7 @@ const OUTCOME_MESSAGE: Record<ReturnType<typeof displayReconciliationStatus>, st
 	matched: "This payment was confirmed and matched to its request — fully reconciled.",
 	unmatched: "This payment was confirmed, but no matching request was found for it.",
 	amount_mismatch:
-		"The payment is confirmed, but the received amount differs from what was requested. It needs review before it can be considered fully reconciled.",
+		"The payment is confirmed and credited to your wallet, but the amount received differs from what was requested.",
 	failed: "This payment attempt failed and was never credited.",
 	pending: "This payment hasn't settled yet — there's nothing to reconcile until it does.",
 };
@@ -98,7 +99,7 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 	const badge = RECONCILIATION_STATUS_BADGE[displayStatus];
 	const expected = reconciliationExpectedAmount(record);
 	const received = Number(record.amount);
-	const difference = expected ? Math.abs(Number(expected) - received) : null;
+	const difference = reconciliationDifference(record);
 	const requestId = reconciliationRequestId(record);
 	const txRef = record.stellarTxHash ?? record.transactionId;
 
@@ -143,10 +144,10 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 					<FieldRow label="Received Amount" value={`${formatUsdc(received)} ${record.currency}`} />
 					{difference !== null && (
 						<FieldRow
-							label="Difference"
+							label={difference < 0 ? "Short By" : difference > 0 ? "Overpaid By" : "Difference"}
 							value={
-								<span className={difference > 0 ? "text-destructive" : undefined}>
-									{formatUsdc(difference)} {record.currency}
+								<span className={difference !== 0 ? "text-destructive" : undefined}>
+									{formatUsdc(Math.abs(difference))} {record.currency}
 								</span>
 							}
 						/>
@@ -161,12 +162,15 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 				<SectionCard title="Transaction Information">
 					<div className="flex items-center justify-between gap-4 py-3 text-c1 sm:text-b3">
 						<span className="text-muted-foreground">Transaction Hash</span>
+						{/* `min-w-0` lets the 64-char hash truncate inside the card
+						    instead of overflowing it — every external-wallet claim
+						    deposit has one. */}
 						<button
 							type="button"
 							onClick={handleCopy}
-							className="flex items-center gap-1.5 font-semibold text-foreground hover:text-primary-600"
+							className="flex min-w-0 items-center gap-1.5 font-semibold text-foreground hover:text-primary-600"
 						>
-							<span className="max-w-40 truncate sm:max-w-none">{txRef}</span>
+							<span className="truncate">{txRef}</span>
 							<Copy className="size-4 shrink-0" aria-hidden="true" />
 						</button>
 					</div>
@@ -184,6 +188,14 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 				<SectionCard title="Reconciliation Outcome">
 					<p className="py-3 text-c1 text-muted-foreground sm:text-b3">
 						{OUTCOME_MESSAGE[displayStatus]}
+						{displayStatus === "amount_mismatch" && difference !== null && difference !== 0 && (
+							<>
+								{" "}
+								{difference < 0
+									? `The customer underpaid by ${formatUsdc(-difference)} ${record.currency}. Follow up with them for the balance.`
+									: `The customer overpaid by ${formatUsdc(difference)} ${record.currency}. You may want to refund the extra.`}
+							</>
+						)}
 					</p>
 					<FieldRow
 						label="Transaction ID"

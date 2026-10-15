@@ -2,7 +2,11 @@ import { useMutation } from "@tanstack/react-query";
 import { useAxiosAuth } from "@/hooks/useAxiosAuth";
 import { apiRoutes } from "@/lib/config/apiRoutes";
 import { extractPaymentCode } from "@/lib/pay";
-import type { ApiSuccessResponse, PublicPaymentLinkData } from "@/lib/api/types";
+import type {
+	ApiSuccessResponse,
+	PaymentLinkClaimData,
+	PublicPaymentLinkData,
+} from "@/lib/api/types";
 
 /** `GET /pay/{code}` is public (no auth required), but every route this app
  * calls it from is already behind the dashboard's own auth gate, so reusing
@@ -19,9 +23,63 @@ function usePaymentLinkLookup() {
 			const { data } = await axiosAuth.get<ApiSuccessResponse<PublicPaymentLinkData>>(
 				apiRoutes.pay.byCode(code),
 			);
+			return { ...data.data, publicCode: code };
+		},
+	});
+}
+
+/** The code the claim endpoints are keyed by. `memo` is documented as equal
+ * to the code, so it's a safe fallback if `publicCode` wasn't attached. */
+function claimCode(link: PublicPaymentLinkData) {
+	return link.publicCode ?? link.memo;
+}
+
+/** Step 1 of paying from an external wallet — registers the sender
+ * address against the link and returns the claim the hash is verified
+ * against in step 2. */
+function useCreatePaymentClaim() {
+	const axiosAuth = useAxiosAuth();
+
+	return useMutation({
+		mutationFn: async ({
+			link,
+			fromAddress,
+		}: {
+			link: PublicPaymentLinkData;
+			fromAddress: string;
+		}) => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<PaymentLinkClaimData>>(
+				apiRoutes.pay.claim(claimCode(link)),
+				{ fromAddress },
+			);
 			return data.data;
 		},
 	});
 }
 
-export { usePaymentLinkLookup };
+/** Step 2 — submits the tx hash; the backend checks it on Horizon and
+ * settles the claim. Any failed check is a 400 with a real reason in
+ * `message`; see `PaymentLinkClaimData` for the full contract. */
+function useVerifyPaymentClaim() {
+	const axiosAuth = useAxiosAuth();
+
+	return useMutation({
+		mutationFn: async ({
+			link,
+			claimId,
+			txHash,
+		}: {
+			link: PublicPaymentLinkData;
+			claimId: string;
+			txHash: string;
+		}) => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<PaymentLinkClaimData>>(
+				apiRoutes.pay.claimVerify(claimCode(link), claimId),
+				{ txHash },
+			);
+			return data.data;
+		},
+	});
+}
+
+export { usePaymentLinkLookup, useCreatePaymentClaim, useVerifyPaymentClaim };

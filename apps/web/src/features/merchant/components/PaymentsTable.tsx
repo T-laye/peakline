@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Eye, Receipt } from "lucide-react";
-import { StatusBadge } from "@repo/ui/badge";
 import { EmptyState } from "@repo/ui/empty-state";
 import {
 	METHOD_LABEL,
@@ -12,6 +11,7 @@ import {
 	formatTransactionDate,
 } from "@/lib/transactions";
 import type { TransactionData } from "@/lib/api/types";
+import { TransactionStatusCell } from "@/features/transactions/components/TransactionStatusCell";
 
 function CardRow({ label, value }: { label: string; value: React.ReactNode }) {
 	return (
@@ -75,7 +75,7 @@ function PaymentsTable({ payments }: { payments: TransactionData[] }) {
 									{payment.method ? METHOD_LABEL[payment.method] : "—"}
 								</td>
 								<td className="p-4">
-									<StatusBadge status={payment.status} />
+									<TransactionStatusCell transaction={payment} />
 								</td>
 								<td className="p-4 text-b3 text-foreground">
 									{formatTransactionDate(payment.completedAt ?? payment.createdAt)}
@@ -114,7 +114,7 @@ function PaymentsTable({ payments }: { payments: TransactionData[] }) {
 							label="Method"
 							value={payment.method ? METHOD_LABEL[payment.method] : "—"}
 						/>
-						<CardRow label="Status" value={<StatusBadge status={payment.status} />} />
+						<CardRow label="Status" value={<TransactionStatusCell transaction={payment} />} />
 						<CardRow
 							label="Date"
 							value={formatTransactionDate(payment.completedAt ?? payment.createdAt)}

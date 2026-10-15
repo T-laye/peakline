@@ -127,6 +127,13 @@ export const apiRoutes = {
 	// merchant managing it.
 	pay: {
 		byCode: (code: string) => `/api/v1/pay/${code}`,
+		// Paying a link from an external Stellar wallet: `claim` registers
+		// the sender address (→ claim `id`), `claimVerify` submits the tx hash
+		// and the backend checks it on Horizon. Confirmed in /docs-json — see
+		// `PaymentLinkClaimData` for the full contract.
+		claim: (code: string) => `/api/v1/pay/${code}/claim`,
+		claimVerify: (code: string, claimId: string) =>
+			`/api/v1/pay/${code}/claim/${claimId}/verify`,
 	},
 
 	// Merchant-only. `verify`/`suspend`/`reactivate`/`status-history` are

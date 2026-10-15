@@ -378,7 +378,14 @@ export interface TransactionData {
 	toAmount?: string | null;
 	stellarTxHash?: string | null;
 	externalAddress?: string | null;
+	/** Free-form. The one key the app reads is `amountMismatch: "true"`,
+	 * set on a deposit that settled against a payment link for a different
+	 * amount than requested (see `hasAmountMismatch`). */
 	metadata?: Record<string, unknown> | null;
+	/** Human-readable reason; null unless `status` is `failed`. */
+	failureReason?: string | null;
+	/** The original transaction this one retried, if any. */
+	retryOfId?: string | null;
 	completedAt?: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -577,6 +584,36 @@ export interface PublicPaymentLinkData {
 	 * components can show the right label without needing their own
 	 * separate "is this actually a business" branch. */
 	recipientRoleLabel?: string;
+	/** Not part of the response either — the code it was looked up by,
+	 * attached by `usePaymentLinkLookup` so the external-wallet claim
+	 * endpoints (`/pay/{code}/claim...`) have it later in the flow. */
+	publicCode?: string;
+}
+
+export type PaymentLinkClaimStatus = "pending" | "settled" | "failed";
+
+/** `PaymentLinkClaimDto` — returned by both external-wallet endpoints
+ * (confirmed against /docs-json):
+ *  - `POST /pay/{code}/claim` (body `{ fromAddress }`) → a `pending` claim;
+ *    its `id` is the claimId the verify step needs.
+ *  - `POST /pay/{code}/claim/{claimId}/verify` (body `{ txHash }`) → the
+ *    backend checks Horizon (tx succeeded, USDC from the right issuer,
+ *    sender = `fromAddress`, recipient = the merchant's wallet, hash not
+ *    already credited) and returns the claim `settled`.
+ * Any failed check is a 400 (and that claim can't be retried — create a
+ * new one); 409 = already settled / hash already credited. A wrong
+ * *amount* is NOT a failure: it still settles, flagged
+ * `metadata.amountMismatch` on the merchant's deposit for reconciliation.
+ * The claim carries no amount, so the payer side can't see that flag. */
+export interface PaymentLinkClaimData {
+	id: string;
+	paymentLinkId: string;
+	fromAddress: string;
+	txHash: string | null;
+	status: PaymentLinkClaimStatus;
+	failureReason?: string | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
 /** `internal` = pure ledger transfer between Peakline users, settled

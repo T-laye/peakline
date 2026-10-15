@@ -45,6 +45,17 @@ function reconciliationExpectedAmount(record: ReconciliationData): string | null
 	return record.paymentLink?.expectedAmount ?? record.fundingIntent?.expectedAmount ?? null;
 }
 
+/** Received minus expected — negative = the customer underpaid, positive =
+ * overpaid. `null` when there was no expected amount to compare against.
+ * Signed rather than absolute: the merchant's next step is opposite in
+ * each case (collect the rest vs. refund the extra), and an external-wallet
+ * claim settles either way (see `PaymentLinkClaimData`). */
+function reconciliationDifference(record: ReconciliationData): number | null {
+	const expected = reconciliationExpectedAmount(record);
+	if (expected === null) return null;
+	return Number(record.amount) - Number(expected);
+}
+
 /** A unified status for display — `reconciliationStatus` only gets a real
  * verdict once the underlying transaction actually completes; before that
  * there's nothing to show but the transaction's own in-flight `status`.
@@ -73,6 +84,7 @@ export {
 	reconciliationRequestId,
 	reconciliationTitle,
 	reconciliationExpectedAmount,
+	reconciliationDifference,
 	displayReconciliationStatus,
 	STATUS_BADGE as RECONCILIATION_STATUS_BADGE,
 };

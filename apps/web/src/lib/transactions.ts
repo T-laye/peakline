@@ -57,6 +57,17 @@ const METHOD_LABEL: Record<TransactionMethod, string> = {
 	conversion: "Conversion",
 };
 
+/** A deposit that settled against a payment link for a different amount
+ * than the link asked for — the external-wallet claim flow
+ * (`POST /pay/{code}/claim/{id}/verify`) still credits it, but records
+ * `metadata.amountMismatch: "true"` and surfaces it in Reconciliation as
+ * `amount_mismatch`. Compared loosely in case it's ever sent as a real
+ * boolean. */
+function hasAmountMismatch(transaction: TransactionData): boolean {
+	const flag = transaction.metadata?.amountMismatch;
+	return flag === true || flag === "true";
+}
+
 function truncateAddress(address: string) {
 	return address.length > 12 ? `${address.slice(0, 5)}...${address.slice(-5)}` : address;
 }
@@ -137,6 +148,7 @@ export {
 	STATUS_LABEL,
 	TYPE_LABEL,
 	METHOD_LABEL,
+	hasAmountMismatch,
 	transactionTitle,
 	transactionNoun,
 	transactionCounterpartyLabel,

@@ -130,6 +130,12 @@ function PayPageContent() {
 		router.push("/pay/confirm");
 	}
 
+	function handlePayExternal() {
+		if (!link) return;
+		setStoreLink(link);
+		router.push("/pay/external");
+	}
+
 	function handlePersonPay(amount: number) {
 		const address = personLookup?.publicKey ?? personRecipient?.address;
 		// Shouldn't happen — `PersonPaymentCard` only ever shows its "Pay"
@@ -214,6 +220,7 @@ function PayPageContent() {
 						<PaymentLinkPreviewCard
 							link={link}
 							onContinue={handleContinue}
+							onPayExternal={handlePayExternal}
 							onChangeCode={handleChangeCode}
 						/>
 					)}

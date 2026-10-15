@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Receipt } from "lucide-react";
-import { StatusBadge } from "@repo/ui/badge";
 import { Skeleton } from "@repo/ui/skeleton";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Pagination } from "@/components/Pagination";
@@ -16,6 +15,7 @@ import {
 	formatTransactionDate,
 } from "@/lib/transactions";
 import type { TransactionData } from "@/lib/api/types";
+import { TransactionStatusCell } from "@/features/transactions/components/TransactionStatusCell";
 
 function RecentPaymentsSkeleton() {
 	return (
@@ -106,7 +106,7 @@ function RecentPaymentsSection() {
 											{payment.method ? METHOD_LABEL[payment.method] : "—"}
 										</td>
 										<td className="p-4">
-											<StatusBadge status={payment.status} />
+											<TransactionStatusCell transaction={payment} />
 										</td>
 										<td className="p-4 text-b3 text-foreground">
 											{formatTransactionDate(payment.completedAt ?? payment.createdAt)}
@@ -136,7 +136,7 @@ function RecentPaymentsSection() {
 									label="Method"
 									value={payment.method ? METHOD_LABEL[payment.method] : "—"}
 								/>
-								<CardRow label="Status" value={<StatusBadge status={payment.status} />} />
+								<CardRow label="Status" value={<TransactionStatusCell transaction={payment} />} />
 								<CardRow
 									label="Date"
 									value={formatTransactionDate(payment.completedAt ?? payment.createdAt)}

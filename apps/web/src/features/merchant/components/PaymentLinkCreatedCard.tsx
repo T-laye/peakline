@@ -83,9 +83,13 @@ function PaymentLinkQrDialog({ link, title }: { link: string; title: string }) {
 function PaymentLinkCreatedCard({
 	link,
 	title = "Payment Link Created",
+	inlineQr = false,
 }: {
 	link: string | null;
 	title?: string;
+	/** Payment Requests' mocks show the QR code right in the card (below
+	 * Share via) instead of behind the QR icon's dialog. */
+	inlineQr?: boolean;
 }) {
 	if (!link) {
 		return (
@@ -135,6 +139,33 @@ function PaymentLinkCreatedCard({
 						</button>
 					))}
 				</div>
+			</div>
+
+			{inlineQr && <InlineQr link={link} />}
+		</div>
+	);
+}
+
+function InlineQr({ link }: { link: string }) {
+	const qrContainerRef = useRef<HTMLDivElement>(null);
+
+	function handleDownload() {
+		const svg = qrContainerRef.current?.querySelector("svg");
+		if (!svg) return;
+		downloadSvgAsPng(svg, "peakline-payment-request-qr-code.png");
+	}
+
+	return (
+		<div className="flex flex-col gap-3">
+			<span className="text-c1 text-muted-foreground sm:text-b3">QR Code</span>
+			<div className="flex items-end gap-4">
+				<div ref={qrContainerRef} className="rounded-lg bg-white p-2">
+					<QRCodeSvg value={link} size={128} />
+				</div>
+				<Button type="button" variant="outline" size="small" onClick={handleDownload}>
+					<Download className="size-4" aria-hidden="true" />
+					Download QR
+				</Button>
 			</div>
 		</div>
 	);

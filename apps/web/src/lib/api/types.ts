@@ -665,3 +665,121 @@ export interface TransferStatusData {
 	createdAt: string;
 	completedAt?: string | null;
 }
+
+/** Third tranche — merchant payment requests. **No backend yet**: these
+ * shapes are the frontend's own best guess (modelled on `PaymentLinkData`
+ * and the v3 brief's lifecycle), served by an in-memory mock in
+ * `features/payment-requests/hooks`. Reconcile field names against the real
+ * API once it lands.
+ *
+ * Lifecycle per the brief: Pending (awaiting payment) → Processing (payment
+ * seen, not yet verified) → Paid (confirmed on Stellar), or Expired (due
+ * date passed unpaid) / Cancelled (merchant cancelled unpaid) / Flagged
+ * (late, unmatched or wrong-amount payment needing manual review). */
+export type PaymentRequestStatus =
+	| "pending"
+	| "processing"
+	| "paid"
+	| "expired"
+	| "cancelled"
+	| "flagged";
+
+export interface PaymentRequestCustomer {
+	id: string;
+	name: string;
+	email?: string | null;
+}
+
+export interface PaymentRequestData {
+	id: string;
+	/** Human-facing unique reference, e.g. "REQ-1001". */
+	reference: string;
+	/** Shown as the detail card's heading (e.g. "Custom Order"). The create
+	 * mock has no field for it, so it's optional. */
+	title?: string | null;
+	customer: PaymentRequestCustomer;
+	/** Decimal string, e.g. "500.00". */
+	amount: string;
+	currency: "USDC";
+	description?: string | null;
+	/** Merchant's own reference, e.g. "INV-001". */
+	customerReference?: string | null;
+	dueAt?: string | null;
+	status: PaymentRequestStatus;
+	/** Full shareable URL, ready to use as-is. */
+	url: string;
+	/** The confirmed Stellar transaction this request was matched to, once
+	 * paid (or the payment that got it flagged). */
+	transactionId?: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface PaymentRequestStatsData {
+	total: number;
+	pending: number;
+	paid: number;
+	expired: number;
+	/** Sum of pending + processing request amounts, decimal string. */
+	outstandingAmount: string;
+}
+
+/** Third tranche — refunds. **No backend yet** (mock in
+ * `features/refunds/hooks`); shapes follow the v3 brief. Lifecycle:
+ * Requested → Authorized → Processing → Completed / Failed. */
+export type RefundStatus = "requested" | "authorized" | "processing" | "completed" | "failed";
+export type RefundType = "full" | "partial";
+export type PaymentMethodKind = "payment_request" | "payment_link" | "qr";
+
+export interface RefundData {
+	id: string;
+	paymentId: string;
+	type: RefundType;
+	/** Decimal string. */
+	amount: string;
+	currency: "USDC";
+	reason: string;
+	status: RefundStatus;
+	/** Always the customer's original paying wallet. */
+	destinationWallet: string;
+	stellarTxHash?: string | null;
+	failureReason?: string | null;
+	createdAt: string;
+	completedAt?: string | null;
+}
+
+/** A verified incoming payment, as seen from Refund Management. */
+export interface RefundablePaymentData {
+	id: string;
+	/** e.g. "TRANS-10-JYPHI01". */
+	reference: string;
+	title: string;
+	customer: { name: string; phone?: string | null };
+	method: PaymentMethodKind;
+	requestReference?: string | null;
+	customerReference?: string | null;
+	expectedAmount: string;
+	/** What was actually received — the refundable ceiling. */
+	amount: string;
+	currency: "USDC";
+	paymentStatus: "paid";
+	reconciliationStatus: ReconciliationStatus;
+	stellarTxHash: string;
+	customerWallet: string;
+	paidAt: string;
+	/** Sum of completed refunds. */
+	refundedAmount: string;
+	/** Sum of refunds still in flight — reserved against the balance. */
+	pendingRefundAmount: string;
+	/** amount − refunded − pending. */
+	remainingRefundable: string;
+	refunds: RefundData[];
+}
+
+export interface RefundStatsData {
+	totalRefundedAmount: string;
+	total: number;
+	completed: number;
+	pending: number;
+	failed: number;
+}

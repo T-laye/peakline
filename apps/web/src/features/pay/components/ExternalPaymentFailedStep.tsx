@@ -3,6 +3,7 @@
 import { X, RefreshCw } from "lucide-react";
 import { Button } from "@repo/ui/button";
 import type { PublicPaymentLinkData } from "@/lib/api/types";
+import { ReportPaymentHashCard } from "@/features/pay/components/ReportPaymentHashCard";
 
 interface ExternalPaymentFailedStepProps {
 	link: PublicPaymentLinkData;
@@ -67,6 +68,9 @@ function ExternalPaymentFailedStep({
 				>
 					Use a different wallet
 				</Button>
+				<div className="w-full text-left">
+					<ReportPaymentHashCard link={link} title="Payment already went through?" onPaid={onGoToDashboard} />
+				</div>
 				<button
 					type="button"
 					onClick={onGoToDashboard}

@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAxiosAuth } from "@/hooks/useAxiosAuth";
 import { apiRoutes } from "@/lib/config/apiRoutes";
 import { extractPaymentCode } from "@/lib/pay";
@@ -82,4 +82,44 @@ function useVerifyPaymentClaim() {
 	});
 }
 
-export { usePaymentLinkLookup, useCreatePaymentClaim, useVerifyPaymentClaim };
+/** "I've paid" — `POST /pay/:code/payment-hash`. The server checks the
+ * transaction succeeded, carries this link's memo and pays the exact
+ * amount, then moves the request to `processing`; it turns `paid` once the
+ * ledger credit lands (poll `usePublicLinkStatus`). */
+function useReportPaymentHash() {
+	const axiosAuth = useAxiosAuth();
+
+	return useMutation({
+		mutationFn: async ({ link, hash }: { link: PublicPaymentLinkData; hash: string }) => {
+			const { data } = await axiosAuth.post<
+				ApiSuccessResponse<{ status: "processing" | "matched"; stellarTxHash: string }>
+			>(apiRoutes.pay.paymentHash(claimCode(link)), { hash: hash.trim().toLowerCase() });
+			return data.data;
+		},
+	});
+}
+
+/** Polls `GET /pay/:code` every 3s while `enabled` (after a hash report). */
+function usePublicLinkStatus(link: PublicPaymentLinkData, enabled: boolean) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: ["pay", "status", claimCode(link)],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<PublicPaymentLinkData>>(
+				apiRoutes.pay.byCode(claimCode(link)),
+			);
+			return data.data;
+		},
+		enabled,
+		refetchInterval: (query) => (query.state.data?.status === "paid" ? false : 3000),
+	});
+}
+
+export {
+	usePaymentLinkLookup,
+	useCreatePaymentClaim,
+	useVerifyPaymentClaim,
+	useReportPaymentHash,
+	usePublicLinkStatus,
+};

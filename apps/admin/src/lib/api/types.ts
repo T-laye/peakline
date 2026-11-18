@@ -341,7 +341,7 @@ export interface AdminBusinessPaymentLinkData {
 	title: string;
 	amount: string;
 	currency: "USDC";
-	status: "active" | "expired" | "cancelled";
+	status: AdminPaymentLinkStatus;
 	publicCode: string;
 	url: string;
 	expiresAt: string;
@@ -461,25 +461,44 @@ export interface AdminPaymentLinkData {
 	description?: string | null;
 	customerReference?: string | null;
 	publicCode: string;
+	/** v3: server-computed lifecycle status (live since tranche 3). */
+	status?: AdminPaymentLinkStatus;
+	/** v3: unique per business, e.g. "PK-7JP4RIRSXQET". */
+	reference?: string;
+	/** v3: `link` = reusable, `request` = single-use customer request. */
+	kind?: "link" | "request";
+	customerName?: string | null;
+	customerEmail?: string | null;
+	customerPhone?: string | null;
+	paidAt?: string | null;
 	expiresAt: string;
 	cancelledAt?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
 
-export type AdminPaymentLinkStatus = "active" | "expired" | "cancelled";
+/** v3 lifecycle. `active` is still accepted by the API as a *filter* alias
+ * of `pending`, but never returned. */
+export type AdminPaymentLinkStatus = "pending" | "processing" | "paid" | "expired" | "cancelled" | "flagged";
 
 /** No server-computed status field exists on either payment-links response
  * (confirmed live) — a link's real status is always a function of exactly
  * these two timestamps, the same rule apps/web's own backend presumably
  * applies before it ever hands a customer a `status` string. */
 export function derivePaymentLinkStatus(link: {
+	status?: AdminPaymentLinkStatus;
 	cancelledAt?: string | null;
 	expiresAt: string;
 }): AdminPaymentLinkStatus {
+	// The API returns a real status since tranche 3; the date-based fallback
+	// only covers responses that still lack it.
+	if (link.status) return link.status;
 	if (link.cancelledAt) return "cancelled";
-	return new Date(link.expiresAt).getTime() < Date.now() ? "expired" : "active";
+	return new Date(link.expiresAt).getTime() < Date.now() ? "expired" : "pending";
 }
+
+/** Statuses an unpaid link can still be cancelled from (API rule). */
+export const CANCELLABLE_PAYMENT_LINK_STATUSES: AdminPaymentLinkStatus[] = ["pending", "flagged", "expired"];
 
 export interface AdminPaymentLinksQuery {
 	q?: string;

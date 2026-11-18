@@ -33,11 +33,14 @@ function ListSkeleton() {
 // real response carries — see `derivePaymentLinkStatus`'s own note.
 const STATUS_BADGE: Record<
 	AdminPaymentLinkStatus,
-	{ variant: "completed" | "failed" | "cancelled"; dot: string; label: string }
+	{ variant: "pending" | "processing" | "completed" | "failed" | "cancelled"; dot: string; label: string }
 > = {
-	active: { variant: "completed", dot: "bg-success-600", label: "Active" },
+	pending: { variant: "pending", dot: "bg-warning-600", label: "Pending" },
+	processing: { variant: "processing", dot: "bg-info-600", label: "Processing" },
+	paid: { variant: "completed", dot: "bg-success-600", label: "Paid" },
 	expired: { variant: "failed", dot: "bg-danger-600", label: "Expired" },
 	cancelled: { variant: "cancelled", dot: "bg-neutral-400", label: "Cancelled" },
+	flagged: { variant: "failed", dot: "bg-danger-600", label: "Flagged" },
 };
 
 function StatusPill({ status }: { status: AdminPaymentLinkStatus }) {
@@ -69,6 +72,17 @@ function BusinessLink({ businessId }: { businessId: string }) {
 }
 
 const COLUMNS: Column<AdminPaymentLinkData>[] = [
+	{
+		key: "reference",
+		label: "Reference",
+		render: (link) => <span className="font-mono text-c1 whitespace-nowrap">{link.reference ?? "—"}</span>,
+	},
+	{
+		key: "kind",
+		label: "Type",
+		render: (link) =>
+			link.kind === "request" ? `Request${link.customerName ? ` · ${link.customerName}` : ""}` : "Link",
+	},
 	{
 		key: "title",
 		label: "Title",

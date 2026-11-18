@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { UserRound } from "lucide-react";
+import { Alert } from "@repo/ui/alert";
 import { Button } from "@repo/ui/button";
+import { Skeleton } from "@repo/ui/skeleton";
+import { useTransferPreview } from "@/features/send/hooks";
+import { describeIssue } from "@/lib/stellarIssues";
+import { getApiErrorMessage } from "@/lib/api/errorMessage";
 import { SendPinDialog } from "@/features/send/components/SendPinDialog";
 import {
 	TRANSFER_METHODS,
@@ -44,6 +49,7 @@ interface ReviewTransferStepProps {
  * whoever a name search resolved to) takes over when present. */
 function ReviewTransferStep({ values, onContinue }: ReviewTransferStepProps) {
 	const [pinDialogOpen, setPinDialogOpen] = useState(false);
+	const { data: preview, isLoading: previewLoading, error: previewError } = useTransferPreview(values);
 	const methodLabel =
 		TRANSFER_METHODS.find((method) => method.value === values.method)?.label ??
 		values.method;
@@ -77,13 +83,48 @@ function ReviewTransferStep({ values, onContinue }: ReviewTransferStepProps) {
 
 			<div className="flex flex-col gap-3 rounded-xl border border-border p-4 sm:p-5">
 				<DetailRow label="Transfer Method" value={methodLabel} />
-				<DetailRow label="Network" value="Stellar" />
-				<DetailRow label="Est. Fee" value="0.00 USDC" muted />
+				{previewLoading ? (
+					<Skeleton className="h-16 w-full" />
+				) : (
+					preview && (
+						<>
+							<DetailRow
+								label="Network"
+								value={preview.type === "internal" ? "Peakline (instant)" : `Stellar ${preview.network === "mainnet" ? "Mainnet" : "Testnet"}`}
+							/>
+							<DetailRow label="Asset" value={preview.asset} />
+							<DetailRow
+								label="Network Fee"
+								value={Number(preview.fee.amount) === 0 ? "Free" : `${preview.fee.amount} ${preview.fee.currency}`}
+								muted
+							/>
+							<DetailRow label="Balance After" value={`${formatUsdc(Number(preview.balanceAfter))} USDC`} muted />
+						</>
+					)
+				)}
 				{values.note && <DetailRow label="Note" value={values.note} muted />}
 				<DetailRow label="Total" value={`${formatUsdc(values.amount)} USDC`} />
 			</div>
 
-			<Button type="button" size="large" className="w-full" onClick={() => setPinDialogOpen(true)}>
+			{preview && !preview.canSend && (
+				<Alert variant="error">
+					This transfer can&apos;t be sent:
+					<ul className="mt-1 list-disc pl-5">
+						{preview.issues.map((issue) => (
+							<li key={issue}>{describeIssue(issue)}</li>
+						))}
+					</ul>
+				</Alert>
+			)}
+			{previewError && <Alert variant="error">{getApiErrorMessage(previewError, "Couldn't check this transfer.")}</Alert>}
+
+			<Button
+				type="button"
+				size="large"
+				className="w-full"
+				disabled={previewLoading || !!previewError || (preview ? !preview.canSend : false)}
+				onClick={() => setPinDialogOpen(true)}
+			>
 				Send
 			</Button>
 

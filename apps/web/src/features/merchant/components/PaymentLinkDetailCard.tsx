@@ -1,27 +1,13 @@
 "use client";
 
-import { Badge } from "@repo/ui/badge";
 import { Button } from "@repo/ui/button";
-import { cn } from "@repo/ui/lib/utils";
 import { formatUsdc, usdcToGhs } from "@/lib/currency";
 import { useCancelPaymentLink } from "@/features/merchant/hooks";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
 import { toast } from "@repo/ui/sonner";
-import type { PaymentLinkData, PaymentLinkStatus } from "@/lib/api/types";
+import type { PaymentLinkData } from "@/lib/api/types";
+import { CANCELLABLE_STATUSES, PaymentLinkStatusPill } from "@/components/PaymentLinkStatusPill";
 
-// Same dot+pill mapping as `PaymentLinksTable`'s own `STATUS_BADGE` — kept
-// as a separate copy rather than a shared export since each file's status
-// pill sits in a different visual context (a table cell vs. this card's
-// centered header) even though the color logic is identical. No "paid"
-// state on the real API — see `PaymentLinkStatus`'s own comment.
-const STATUS_BADGE: Record<
-	PaymentLinkStatus,
-	{ variant: "completed" | "failed" | "cancelled"; dot: string; label: string }
-> = {
-	active: { variant: "completed", dot: "bg-success-600", label: "Active" },
-	expired: { variant: "failed", dot: "bg-danger-600", label: "Expired" },
-	cancelled: { variant: "cancelled", dot: "bg-neutral-400", label: "Cancelled" },
-};
 
 function formatLinkDate(iso: string) {
 	return new Date(iso).toLocaleDateString(undefined, {
@@ -49,7 +35,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
  * counterparty, no status banner icon, no transaction id).
  */
 function PaymentLinkDetailCard({ link }: { link: PaymentLinkData }) {
-	const badge = STATUS_BADGE[link.status];
 	const amount = Number(link.amount);
 	const cancelLink = useCancelPaymentLink();
 
@@ -64,10 +49,7 @@ function PaymentLinkDetailCard({ link }: { link: PaymentLinkData }) {
 		<div className="flex flex-col gap-5 rounded-2xl border border-secondary-300 bg-secondary-100 p-6 sm:p-8">
 			<div className="flex flex-col items-center gap-3 text-center">
 				<h2 className="text-s1 text-foreground sm:text-h5">{link.title}</h2>
-				<Badge variant={badge.variant}>
-					<span className={cn("size-1.5 rounded-full", badge.dot)} aria-hidden="true" />
-					{badge.label}
-				</Badge>
+				<PaymentLinkStatusPill status={link.status} />
 			</div>
 
 			<div className="flex flex-col gap-1 rounded-xl border border-secondary-300 bg-secondary-100 p-4 sm:p-5">
@@ -80,11 +62,12 @@ function PaymentLinkDetailCard({ link }: { link: PaymentLinkData }) {
 			</div>
 
 			<div className="flex flex-col divide-y divide-secondary-300 border-t border-secondary-300">
+				<DetailRow label="Reference" value={link.reference} />
 				<DetailRow label="Expiration Date" value={formatLinkDate(link.expiresAt)} />
 				<DetailRow label="Description" value={link.description ?? "—"} />
 			</div>
 
-			{link.status === "active" && (
+			{CANCELLABLE_STATUSES.includes(link.status) && (
 				<Button
 					type="button"
 					variant="outline"

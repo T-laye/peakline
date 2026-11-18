@@ -43,7 +43,7 @@ function buildPersonPayTarget(
 		currency: "USDC",
 		description: null,
 		expiresAt: "",
-		status: "active",
+		status: "pending",
 		businessName: name ?? recipient.address,
 		destinationAddress: recipient.address,
 		memo: "",

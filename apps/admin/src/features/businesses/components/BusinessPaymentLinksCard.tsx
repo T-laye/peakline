@@ -10,10 +10,16 @@ import { formatUsdc } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
 import type { AdminBusinessPaymentLinkData } from "@/lib/api/types";
 
-const STATUS_VARIANT: Record<AdminBusinessPaymentLinkData["status"], "completed" | "cancelled" | "failed"> = {
-	active: "completed",
-	expired: "cancelled",
-	cancelled: "failed",
+const STATUS_VARIANT: Record<
+	AdminBusinessPaymentLinkData["status"],
+	"pending" | "processing" | "completed" | "cancelled" | "failed"
+> = {
+	pending: "pending",
+	processing: "processing",
+	paid: "completed",
+	expired: "failed",
+	cancelled: "cancelled",
+	flagged: "failed",
 };
 
 function BusinessPaymentLinksCard({ businessId }: { businessId: string }) {

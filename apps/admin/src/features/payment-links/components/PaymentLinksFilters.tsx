@@ -14,9 +14,12 @@ interface PaymentLinksFiltersProps {
 
 const STATUS_OPTIONS: { value: AdminPaymentLinksQuery["status"] | "all"; label: string }[] = [
 	{ value: "all", label: "All statuses" },
-	{ value: "active", label: "Active" },
+	{ value: "pending", label: "Pending" },
+	{ value: "processing", label: "Processing" },
+	{ value: "paid", label: "Paid" },
 	{ value: "expired", label: "Expired" },
 	{ value: "cancelled", label: "Cancelled" },
+	{ value: "flagged", label: "Flagged" },
 ];
 
 function PaymentLinksFilters({
@@ -35,7 +38,7 @@ function PaymentLinksFilters({
 				<Input
 					value={search}
 					onChange={(e) => onSearchChange(e.target.value)}
-					placeholder="Search by title"
+					placeholder="Search by title, reference or customer"
 					aria-label="Search payment links"
 					className="pl-10"
 				/>

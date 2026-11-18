@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@repo/ui/sonner";
 import { ExternalPayStepHeader } from "@/features/pay/components/ExternalPayStepHeader";
 import { ExternalWalletAddressStep } from "@/features/pay/components/ExternalWalletAddressStep";
+import { ReportPaymentHashCard } from "@/features/pay/components/ReportPaymentHashCard";
 import { useCreatePaymentClaim } from "@/features/pay/hooks";
 import { usePayFlowStore } from "@/features/pay/store/payFlowStore";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
@@ -54,6 +55,7 @@ export default function ExternalWalletPage() {
 				loading={createClaim.isPending}
 				onContinue={handleContinue}
 			/>
+			<ReportPaymentHashCard link={link} onPaid={() => router.push("/")} />
 		</div>
 	);
 }

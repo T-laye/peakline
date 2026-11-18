@@ -12,6 +12,9 @@ import {
 	GitCompareArrows,
 	BarChart3,
 	User,
+	FileText,
+	Undo2,
+	Users,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -26,16 +29,22 @@ import { cn } from "@repo/ui/lib/utils";
 // stays (still a real "Coming soon" page, not a 404) so a direct link
 // still works, it's just not advertised in the sidebar until there's a
 // real screen to show.
+// Third tranche (v3 mocks): "Payment Requests" and "Refund Management" slot
+// in after Payment Links, and "Customers" is back between Transactions and
+// Reconciliation per the v3 sidebar (its page is still "Coming soon").
 export const MERCHANT_NAV_ITEMS = [
 	{ label: "Overview", href: "/", icon: LayoutGrid },
 	{ label: "Wallet", href: "/wallet", icon: Wallet },
 	{ label: "Payments", href: "/payments", icon: Receipt },
 	{ label: "Payment Links", href: "/payment-links", icon: Link2 },
+	{ label: "Payment Requests", href: "/payment-requests", icon: FileText },
+	{ label: "Refund Management", href: "/refunds", icon: Undo2 },
 	{ label: "My QR Code", href: "/qr-code", icon: QrCode },
 	{ label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
+	{ label: "Customers", href: "/customers", icon: Users },
 	{ label: "Reconciliation", href: "/reconciliation", icon: GitCompareArrows },
 	{ label: "Analytics", href: "/analytics", icon: BarChart3 },
-	{ label: "Accounts", href: "/account", icon: User },
+	{ label: "Account", href: "/account", icon: User },
 ] as const;
 
 /** True for the item's own route, and (except the root Overview item) any

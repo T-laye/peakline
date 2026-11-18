@@ -15,9 +15,12 @@ interface PaymentLinkPreviewCardProps {
 	onChangeCode: () => void;
 }
 
-const STATUS_MESSAGE: Record<"expired" | "cancelled", string> = {
+const STATUS_MESSAGE: Record<Exclude<PublicPaymentLinkData["status"], "pending">, string> = {
+	processing: "A payment for this request is being verified on Stellar.",
+	paid: "This payment request has already been paid.",
 	expired: "This payment link has expired and can no longer be paid.",
 	cancelled: "This payment link was cancelled by the merchant.",
+	flagged: "This payment request is under review by the merchant and can't be paid right now.",
 };
 
 /** Right-hand card, per the mock's original shape ("No Merchant Scanned"
@@ -41,7 +44,7 @@ function PaymentLinkPreviewCard({
 	}
 
 	const amount = Number(link.amount);
-	const payable = link.status === "active";
+	const payable = link.status === "pending";
 
 	return (
 		<div className="flex min-h-full flex-col items-center justify-center gap-4 rounded-2xl border border-secondary-300 bg-secondary-100 p-6 text-center sm:p-8">
@@ -68,7 +71,7 @@ function PaymentLinkPreviewCard({
 
 			{!payable && (
 				<p className="text-c1 text-destructive sm:text-b3">
-					{STATUS_MESSAGE[link.status as "expired" | "cancelled"]}
+					{link.status !== "pending" && STATUS_MESSAGE[link.status]}
 				</p>
 			)}
 

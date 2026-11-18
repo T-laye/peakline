@@ -1,91 +1,65 @@
-import type { ReconciliationData } from "@/lib/api/types";
+import type { ReconciliationData, ReconciliationStatus, ReconciliationTransactionType } from "@/lib/api/types";
 
-/** A real reconciliation status only ever needs three of `Badge`'s variants
- * — `completed`/`failed`/`pending` — narrower than `Badge`'s own full
- * variant union (which also has `default`/`secondary`/`outline`) and than
- * `StatusBadge`'s `PaymentStatus` (which adds `reversed`, not a variant
- * `Badge` itself actually accepts). */
-type ReconciliationBadgeVariant = "completed" | "failed" | "pending";
+type ReconciliationBadgeVariant = "completed" | "failed" | "pending" | "processing" | "cancelled";
 
-/** The table/detail "Payment Method" column isn't a literal API field — the
- * real `method` enum on a transaction is `intent | stellar | peakline |
- * bank | conversion` (confirmed live), none of which read "Payment Link" or
- * "QR" directly. Derived instead from which match object is populated:
- * `fundingIntent` set means it arrived via a scanned QR (`method: intent`
- * is literally documented as "renders as QR on the client"); `paymentLink`
- * set means a payment link. Neither means an unmatched/direct deposit with
- * no request behind it at all. */
-function reconciliationMethodLabel(record: ReconciliationData): string {
-	if (record.paymentLink) return "Payment Link";
-	if (record.fundingIntent) return "QR";
-	return "Direct Deposit";
-}
-
-/** "Request ID" as shown across Payments/Reconciliation — the payment
- * link's own short `publicCode`, or the funding intent's `memo` (the
- * Stellar text memo a QR payer's wallet actually attaches, so it's the one
- * identifier that's real for a QR-received deposit too). `null` when
- * neither exists (a direct/unmatched deposit has no request to name). */
-function reconciliationRequestId(record: ReconciliationData): string | null {
-	return record.paymentLink?.publicCode ?? record.fundingIntent?.memo ?? null;
-}
-
-/** "Title" — only a payment link carries one (`ReconciliationFundingIntentDto`
- * has no title field at all, confirmed live) — falls back to the method
- * label rather than leaving the column blank for a QR/direct row. */
-function reconciliationTitle(record: ReconciliationData): string {
-	return record.paymentLink?.title ?? reconciliationMethodLabel(record);
-}
-
-/** The amount the payer was actually expected to send — only known at all
- * when matched to a payment link or funding intent, both of which carry
- * their own `expectedAmount`. `null` for an unmatched/direct deposit, which
- * was never tied to a specific expected amount to begin with. */
-function reconciliationExpectedAmount(record: ReconciliationData): string | null {
-	return record.paymentLink?.expectedAmount ?? record.fundingIntent?.expectedAmount ?? null;
-}
-
-/** Received minus expected — negative = the customer underpaid, positive =
- * overpaid. `null` when there was no expected amount to compare against.
- * Signed rather than absolute: the merchant's next step is opposite in
- * each case (collect the rest vs. refund the extra), and an external-wallet
- * claim settles either way (see `PaymentLinkClaimData`). */
-function reconciliationDifference(record: ReconciliationData): number | null {
-	const expected = reconciliationExpectedAmount(record);
-	if (expected === null) return null;
-	return Number(record.amount) - Number(expected);
-}
-
-/** A unified status for display — `reconciliationStatus` only gets a real
- * verdict once the underlying transaction actually completes; before that
- * there's nothing to show but the transaction's own in-flight `status`.
- * Not a 5th value of the real `reconciliationStatus` enum, just how this
- * app chooses to render the "not resolved yet" case. */
-type DisplayReconciliationStatus = "matched" | "unmatched" | "amount_mismatch" | "failed" | "pending";
-
-function displayReconciliationStatus(record: ReconciliationData): DisplayReconciliationStatus {
-	if (record.status !== "completed" && record.status !== "failed") return "pending";
-	return record.reconciliationStatus;
-}
-
-const STATUS_BADGE: Record<
-	DisplayReconciliationStatus,
-	{ variant: ReconciliationBadgeVariant; label: string }
-> = {
-	matched: { variant: "completed", label: "Matched" },
-	unmatched: { variant: "failed", label: "Unmatched" },
-	amount_mismatch: { variant: "pending", label: "Mismatched" },
-	failed: { variant: "failed", label: "Failed" },
-	pending: { variant: "pending", label: "Pending" },
+/** v3 `reconciliationStatus` → pill. `flagged`/`amount_mismatch` are open
+ * review flags (warning), `reviewed` is a resolved one (neutral), `pending`
+ * is a refund still in flight (info). */
+const STATUS_BADGE: Record<ReconciliationStatus, { variant: ReconciliationBadgeVariant; dot: string; label: string }> = {
+	matched: { variant: "completed", dot: "bg-success-600", label: "Matched" },
+	unmatched: { variant: "failed", dot: "bg-danger-600", label: "Unmatched" },
+	flagged: { variant: "pending", dot: "bg-warning-600", label: "Flagged" },
+	amount_mismatch: { variant: "pending", dot: "bg-warning-600", label: "Mismatched" },
+	failed: { variant: "failed", dot: "bg-danger-600", label: "Failed" },
+	pending: { variant: "processing", dot: "bg-info-600", label: "Pending" },
+	reviewed: { variant: "cancelled", dot: "bg-neutral-400", label: "Reviewed" },
 };
+
+const TYPE_LABEL: Record<ReconciliationTransactionType, string> = {
+	payment: "Payment",
+	refund: "Refund",
+	unmatched_payment: "Uncredited payment",
+};
+
+const REFUND_STATUS_LABEL: Record<string, string> = {
+	pending: "Not refunded",
+	partially_refunded: "Partially refunded",
+	refunded: "Refunded",
+	requested: "Requested",
+	authorized: "Authorized",
+	processing: "Processing",
+	completed: "Completed",
+	failed: "Failed",
+};
+
+function refundStatusLabel(status: string | null | undefined) {
+	if (!status) return null;
+	return REFUND_STATUS_LABEL[status] ?? status;
+}
+
+function shortAddress(address: string) {
+	return address.length > 12 ? `${address.slice(0, 5)}...${address.slice(-5)}` : address;
+}
+
+/** Customer name/email when the payment settled a customer request, else the
+ * payer (or refund recipient) wallet, shortened. */
+function reconciliationCustomerLabel(record: ReconciliationData) {
+	if (record.customerName) return record.customerName;
+	if (record.customerEmail) return record.customerEmail;
+	if (record.counterpartyAddress) return shortAddress(record.counterpartyAddress);
+	return "—";
+}
+
+/** Statuses with an open review flag the merchant can resolve. */
+function needsReview(record: ReconciliationData) {
+	return record.reconciliationStatus === "flagged" || record.reconciliationStatus === "amount_mismatch";
+}
 
 export {
-	reconciliationMethodLabel,
-	reconciliationRequestId,
-	reconciliationTitle,
-	reconciliationExpectedAmount,
-	reconciliationDifference,
-	displayReconciliationStatus,
 	STATUS_BADGE as RECONCILIATION_STATUS_BADGE,
+	TYPE_LABEL as RECONCILIATION_TYPE_LABEL,
+	refundStatusLabel,
+	reconciliationCustomerLabel,
+	shortAddress,
+	needsReview,
 };
-export type { DisplayReconciliationStatus };

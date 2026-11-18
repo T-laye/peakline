@@ -1,8 +1,13 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAxiosAuth } from "@/hooks/useAxiosAuth";
 import { apiRoutes } from "@/lib/config/apiRoutes";
 import { splitPhoneForTransfer } from "@/lib/phone";
-import type { ApiSuccessResponse, SendMoneyResponseData } from "@/lib/api/types";
+import type {
+	ApiSuccessResponse,
+	SendMoneyResponseData,
+	TransferPreviewData,
+	TransferStatusData,
+} from "@/lib/api/types";
 import type { SendMoneyValues } from "@/lib/validations/sendValidations";
 
 interface SendMoneyPayload {
@@ -13,7 +18,8 @@ interface SendMoneyPayload {
 /** `SendMoneyDto`'s wire shape depends on `mode` — only the fields that
  * method actually needs get sent (the form's single `recipient` field
  * covers all three, split apart here). */
-function toSendMoneyBody(values: SendMoneyValues, pin: string) {
+/** `pin` omitted = the preview body (same shape minus the PIN). */
+function toSendMoneyBody(values: SendMoneyValues, pin?: string) {
 	const shared = {
 		amount: values.amount.toFixed(2),
 		pin,
@@ -61,5 +67,61 @@ function useSendMoney() {
 	});
 }
 
-export { useSendMoney };
+/** `POST /transfers/preview` — recipient, network, fee, balance after, and
+ * whether it can be sent (with `issues` when not). Nothing is debited. */
+function useTransferPreview(values: SendMoneyValues | null) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: ["transfers", "preview", values],
+		queryFn: async () => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<TransferPreviewData>>(
+				apiRoutes.transfers.PREVIEW,
+				toSendMoneyBody(values!),
+			);
+			return data.data;
+		},
+		enabled: !!values,
+		retry: false,
+		staleTime: 0,
+	});
+}
+
+/** `GET /transfers/:id` — polled every 3s while `processing`. */
+function useTransferStatus(id: string | null) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: ["transfers", "status", id],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<TransferStatusData>>(apiRoutes.transfers.byId(id!));
+			return data.data;
+		},
+		enabled: !!id,
+		refetchInterval: (query) => {
+			const status = query.state.data?.status;
+			return !status || status === "processing" || status === "pending" ? 3000 : false;
+		},
+	});
+}
+
+/** `POST /transfers/:id/recheck` — asks Stellar again; safe to repeat and
+ * never pays twice. */
+function useRecheckTransfer() {
+	const axiosAuth = useAxiosAuth();
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (id: string) => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<TransferStatusData>>(apiRoutes.transfers.recheck(id));
+			return data.data;
+		},
+		onSuccess: (status) => {
+			queryClient.setQueryData(["transfers", "status", status.transactionId], status);
+			queryClient.invalidateQueries({ queryKey: ["dashboard", "balance"] });
+		},
+	});
+}
+
+export { useSendMoney, useTransferPreview, useTransferStatus, useRecheckTransfer };
 export type { SendMoneyPayload };

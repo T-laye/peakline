@@ -21,4 +21,20 @@ function getApiErrorMessage(
 	return fallback;
 }
 
-export { getApiErrorMessage };
+function getApiErrorStatus(error: unknown) {
+	return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+/** e.g. `INVALID_PIN`, `PIN_LOCKED`, `PIN_NOT_SET`. */
+function getApiErrorCode(error: unknown) {
+	return isAxiosError<ApiErrorResponse>(error) ? error.response?.data?.code : undefined;
+}
+
+/** `details.issues` from a 422 (refund authorize, transfer send/preview). */
+function getApiErrorIssues(error: unknown): string[] {
+	if (!isAxiosError<ApiErrorResponse>(error)) return [];
+	const issues = error.response?.data?.details?.issues;
+	return Array.isArray(issues) ? issues : [];
+}
+
+export { getApiErrorMessage, getApiErrorStatus, getApiErrorCode, getApiErrorIssues };

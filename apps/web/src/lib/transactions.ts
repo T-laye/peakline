@@ -47,6 +47,7 @@ const TYPE_LABEL: Record<TransactionType, string> = {
 	internal_transfer: "Transfer",
 	conversion: "Conversion",
 	withdrawal_ghs: "GHS Withdrawal",
+	refund: "Refund",
 };
 
 const METHOD_LABEL: Record<TransactionMethod, string> = {
@@ -109,6 +110,7 @@ function transactionNoun(transaction: TransactionData): string {
 		return "Withdrawal";
 	}
 	if (transaction.type === "conversion") return "Conversion";
+	if (transaction.type === "refund") return "Refund";
 	return transaction.direction === "outgoing" ? "Transfer" : "Payment";
 }
 

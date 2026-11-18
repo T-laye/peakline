@@ -1,7 +1,7 @@
 "use client";
 
 import { Wallet } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
@@ -49,7 +49,7 @@ function FundWalletFormStep({ defaultValues, onContinue }: FundWalletFormStepPro
 			amount: (defaultValues?.amount ?? "") as unknown as number,
 		},
 	});
-	const amount = Number(form.watch("amount"));
+	const amount = Number(useWatch({ control: form.control, name: "amount" }));
 	const amountValid = amount > 0 && !form.formState.errors.amount;
 
 	if (isLoadingWallet) {

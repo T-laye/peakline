@@ -14,6 +14,7 @@ import {
 	FormControl,
 	FormMessage,
 } from "@repo/ui/form";
+import QRCodeSvg from "react-qr-code";
 import { CopyableDetailRow } from "@/features/pay/components/CopyableDetailRow";
 import { PayingSummary } from "@/features/pay/components/PayingSummary";
 import { formatUsdc } from "@/lib/currency";
@@ -87,10 +88,26 @@ function ExternalTransactionStep({
 						</div>
 					</div>
 
+					{link.paymentUri && (
+						<div className="flex items-center gap-4 rounded-xl border border-border p-4">
+							<div className="shrink-0 rounded-lg bg-white p-2">
+								<QRCodeSvg value={link.paymentUri} size={104} />
+							</div>
+							<div className="flex flex-col gap-2">
+								<span className="text-c1 text-muted-foreground sm:text-b3">
+									Scan with a Stellar wallet (SEP-7) to fill in the address, amount and memo automatically.
+								</span>
+								<a href={link.paymentUri} className="text-b4 font-semibold text-primary-600 hover:underline sm:text-b3">
+									Open in wallet
+								</a>
+							</div>
+						</div>
+					)}
+
 					<Alert variant="warning">
 						Send USDC from the wallet you entered, to this exact address, with the
-						memo. A different amount still goes through, but the merchant will have to
-						reconcile it.
+						memo. A payment with a different amount or without the memo still arrives,
+						but it&apos;s flagged for the merchant to review instead of settling the request.
 					</Alert>
 				</div>
 

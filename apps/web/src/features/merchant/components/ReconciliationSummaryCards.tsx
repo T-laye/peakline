@@ -44,17 +44,13 @@ function ReconciliationSummaryCards() {
 
 	return (
 		<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			<SummaryCard label="Total Records" value={data.total} description="Payments and refunds" />
+			<SummaryCard label="Matched" value={data.matched} description="Tied to a request or payout" />
+			<SummaryCard label="Unmatched" value={data.unmatched} description="No matching request found" />
 			<SummaryCard
-				label="Total Request Links"
-				value={data.total}
-				description="Payments being reconciled"
-			/>
-			<SummaryCard label="Matched" value={data.matched} description="Payments matched successfully" />
-			<SummaryCard label="Unmatched" value={data.unmatched} description="Payments without a match" />
-			<SummaryCard
-				label="Mismatched"
-				value={data.amountMismatch}
-				description="Expected / received amount differ"
+				label="Needs Review"
+				value={data.flagged + data.amountMismatch}
+				description="Flagged or wrong amount"
 			/>
 		</div>
 	);

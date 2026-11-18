@@ -1,84 +1,159 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { Copy, SearchX } from "lucide-react";
-import { Skeleton } from "@repo/ui/skeleton";
-import { EmptyState } from "@repo/ui/empty-state";
 import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
+import { EmptyState } from "@repo/ui/empty-state";
+import { Input } from "@repo/ui/input";
+import { Skeleton } from "@repo/ui/skeleton";
 import { cn } from "@repo/ui/lib/utils";
 import { toast } from "@repo/ui/sonner";
 import {
-	displayReconciliationStatus,
-	reconciliationDifference,
-	reconciliationExpectedAmount,
-	reconciliationMethodLabel,
-	reconciliationRequestId,
-	reconciliationTitle,
 	RECONCILIATION_STATUS_BADGE,
+	RECONCILIATION_TYPE_LABEL,
+	needsReview,
+	refundStatusLabel,
 } from "@/lib/reconciliation";
 import { STATUS_LABEL, formatTransactionDate } from "@/lib/transactions";
 import { formatUsdc } from "@/lib/currency";
 import { stellarExplorerUrl } from "@/lib/stellar";
-import { useReconciliationRecord } from "@/features/merchant/hooks";
+import { describeFlagReason } from "@/lib/stellarIssues";
+import {
+	useMerchantPaymentLink,
+	useOpenFlagFor,
+	useReconciliationRecord,
+	useResolveFlag,
+} from "@/features/merchant/hooks";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
+import type { ReconciliationData, ReconciliationStatus } from "@/lib/api/types";
 
-const DOT_CLASS: Record<string, string> = {
-	completed: "bg-success-600",
-	failed: "bg-danger-600",
-	pending: "bg-warning-600",
-};
-
-const OUTCOME_MESSAGE: Record<ReturnType<typeof displayReconciliationStatus>, string> = {
-	matched: "This payment was confirmed and matched to its request — fully reconciled.",
+const OUTCOME_MESSAGE: Record<ReconciliationStatus, string> = {
+	matched: "This record is tied to its request or confirmed payout — fully reconciled.",
 	unmatched: "This payment was confirmed, but no matching request was found for it.",
+	flagged: "This payment needs manual review before it can be considered reconciled.",
 	amount_mismatch:
 		"The payment is confirmed and credited to your wallet, but the amount received differs from what was requested.",
-	failed: "This payment attempt failed and was never credited.",
-	pending: "This payment hasn't settled yet — there's nothing to reconcile until it does.",
+	failed: "This attempt failed and was never credited.",
+	pending: "This refund is still in flight. It reconciles once Stellar confirms it.",
+	reviewed: "This flagged payment was reviewed and resolved.",
 };
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
-		<div className="flex flex-col gap-4 rounded-2xl border border-border bg-background p-5 sm:p-6">
-			<h2 className="text-b2 font-semibold text-foreground">{title}</h2>
-			<div className="flex flex-col divide-y divide-border">{children}</div>
+		<section className="flex flex-col gap-2">
+			<h2 className="text-b2 font-medium text-foreground sm:text-b1">{title}</h2>
+			<div className="flex flex-col">{children}</div>
+		</section>
+	);
+}
+
+function FieldRow({
+	label,
+	value,
+	valueClassName,
+}: {
+	label: string;
+	value: React.ReactNode;
+	valueClassName?: string;
+}) {
+	return (
+		<div className="flex items-center justify-between gap-4 py-2.5 text-c1 sm:text-b3">
+			<span className="shrink-0 text-muted-foreground">{label}</span>
+			<span className={cn("truncate font-semibold text-foreground", valueClassName)}>{value}</span>
 		</div>
 	);
 }
 
-function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+function CopyField({ label, value }: { label: string; value: string }) {
+	async function handleCopy() {
+		try {
+			await navigator.clipboard.writeText(value);
+			toast.success("Copied");
+		} catch {
+			toast.error("Couldn't copy");
+		}
+	}
 	return (
-		<div className="flex items-center justify-between gap-4 py-3 text-c1 sm:text-b3">
+		<div className="flex items-center justify-between gap-4 py-2.5 text-c1 sm:text-b3">
 			<span className="shrink-0 text-muted-foreground">{label}</span>
-			<span className="truncate font-semibold text-foreground">{value}</span>
+			{/* `min-w-0` lets a 64-char hash truncate instead of overflowing. */}
+			<button
+				type="button"
+				onClick={handleCopy}
+				aria-label={`Copy ${label}`}
+				className="flex min-w-0 items-center gap-1.5 font-medium text-foreground hover:text-primary-600"
+			>
+				<span className="truncate">{value}</span>
+				<Copy className="size-4 shrink-0" aria-hidden="true" />
+			</button>
+		</div>
+	);
+}
+
+/** "Mark as reviewed" — resolves the open flag behind a flagged payment
+ * (`POST /payment-links/flags/{flagId}/resolve`). */
+function ResolveFlagForm({ record }: { record: ReconciliationData }) {
+	const { data: flag, isLoading } = useOpenFlagFor(record);
+	const resolveFlag = useResolveFlag();
+	const [note, setNote] = useState("");
+
+	if (isLoading) return <Skeleton className="h-11 w-full" />;
+	if (!flag) return null;
+
+	function handleResolve() {
+		if (!flag || note.trim().length < 3) return;
+		resolveFlag.mutate(
+			{ flagId: flag.id, note: note.trim() },
+			{
+				onSuccess: () => toast.success("Marked as reviewed"),
+				onError: (error) => toast.error(getApiErrorMessage(error, "Couldn't resolve this flag")),
+			},
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-2 pt-2">
+			<span className="text-c1 text-muted-foreground sm:text-b3">Flag reason: {describeFlagReason(flag.reason)}</span>
+			<div className="flex flex-col gap-2 sm:flex-row">
+				<Input
+					value={note}
+					onChange={(e) => setNote(e.target.value)}
+					placeholder="Review note, e.g. customer confirmed by phone"
+					aria-label="Review note"
+				/>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={handleResolve}
+					disabled={note.trim().length < 3}
+					loading={resolveFlag.isPending}
+					className="shrink-0"
+				>
+					Mark as reviewed
+				</Button>
+			</div>
 		</div>
 	);
 }
 
 /**
- * Reconciliation's own detail page — real data throughout, adjusted from
- * the mock where real fields don't exist:
- * - No "Customer Reference" exists on either match object (confirmed live:
- *   `ReconciliationPaymentLinkData` has no `customerReference` field at
- *   all) — omitted rather than shown blank.
- * - No "Merchant Wallet" field exists on this endpoint (it would need a
- *   separate business/wallet lookup this page doesn't otherwise need) —
- *   omitted rather than guessed.
- * - "Sender Wallet" uses the real `externalAddress` field (the mock's own
- *   version showed the request title there by mistake).
- * - "Reconciliation Outcome" is a real message derived from the actual
- *   status, not placeholder copy.
+ * Reconciliation Details (v3 mock + v3 API). Request title and expected
+ * amount come from the linked payment request when there is one; the
+ * record itself carries customer, references, statuses and addresses.
+ * Actions: resolve an open review flag, request the shortfall when the
+ * customer underpaid, or start a refund for a payment.
  */
-function ReconciliationDetail({ txId }: { txId: string }) {
-	const { data: record, isLoading, isError, error } = useReconciliationRecord(txId);
+function ReconciliationDetail({ reference }: { reference: string }) {
+	const { data: record, isLoading, isError, error } = useReconciliationRecord(reference);
+	const { data: request } = useMerchantPaymentLink(record?.paymentRequestId ?? "");
 
 	if (isLoading) {
 		return (
 			<div className="flex flex-col gap-4">
 				<Skeleton className="h-16 w-full rounded-2xl" />
-				<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-					<Skeleton className="h-64 w-full rounded-2xl" />
-					<Skeleton className="h-64 w-full rounded-2xl" />
-				</div>
+				<Skeleton className="h-80 w-full rounded-2xl" />
 			</div>
 		);
 	}
@@ -89,133 +164,140 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 				<EmptyState
 					icon={SearchX}
 					title="Reconciliation record not found"
-					description={getApiErrorMessage(error, "It may have been removed, or the id is wrong.")}
+					description={getApiErrorMessage(error, "It may have been removed, or the reference is wrong.")}
 				/>
 			</div>
 		);
 	}
 
-	const displayStatus = displayReconciliationStatus(record);
-	const badge = RECONCILIATION_STATUS_BADGE[displayStatus];
-	const expected = reconciliationExpectedAmount(record);
+	const badge = RECONCILIATION_STATUS_BADGE[record.reconciliationStatus];
 	const received = Number(record.amount);
-	const difference = reconciliationDifference(record);
-	const requestId = reconciliationRequestId(record);
-	const txRef = record.stellarTxHash ?? record.transactionId;
-
-	async function handleCopy() {
-		try {
-			await navigator.clipboard.writeText(txRef);
-			toast.success("Copied");
-		} catch {
-			toast.error("Couldn't copy");
-		}
-	}
+	const expected = request ? Number(request.amount) : null;
+	const isPayment = record.transactionType === "payment";
+	const difference = expected !== null && isPayment ? received - expected : null;
+	const canRefund = isPayment && record.paymentStatus === "completed" && record.refundStatus !== "refunded";
+	const underpaid = difference !== null && difference < 0;
 
 	return (
-		<div className="flex flex-col gap-4">
-			<div className="flex flex-col gap-1 rounded-2xl border border-border bg-background p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-				<div className="flex flex-col gap-1">
-					<span className="text-b3 text-muted-foreground">
-						Request ID: {requestId ?? record.transactionId}
-					</span>
-					<h1 className="text-h5 text-foreground sm:text-h4">{reconciliationTitle(record)}</h1>
-				</div>
-				<Badge variant={badge.variant} className="self-start sm:self-auto">
-					<span className={cn("size-1.5 rounded-full", DOT_CLASS[badge.variant])} aria-hidden="true" />
-					{badge.label}
-				</Badge>
-			</div>
-
-			<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-				<SectionCard title="Payment Information">
-					{requestId && <FieldRow label="Request ID" value={requestId} />}
-					<FieldRow label="Payment Method" value={reconciliationMethodLabel(record)} />
-					{record.paymentLink && (
-						<FieldRow label="Request Title" value={record.paymentLink.title} />
-					)}
-					{expected && (
-						<FieldRow label="Expected Amount" value={`${formatUsdc(Number(expected))} USDC`} />
-					)}
-					<FieldRow label="Request Created" value={formatTransactionDate(record.createdAt)} />
-				</SectionCard>
-
-				<SectionCard title="Received Payment">
-					<FieldRow label="Received Amount" value={`${formatUsdc(received)} ${record.currency}`} />
-					{difference !== null && (
-						<FieldRow
-							label={difference < 0 ? "Short By" : difference > 0 ? "Overpaid By" : "Difference"}
-							value={
-								<span className={difference !== 0 ? "text-destructive" : undefined}>
-									{formatUsdc(Math.abs(difference))} {record.currency}
-								</span>
-							}
-						/>
-					)}
-					<FieldRow label="Payment Status" value={STATUS_LABEL[record.status]} />
-					<FieldRow
-						label="Payment Date"
-						value={record.completedAt ? formatTransactionDate(record.completedAt) : "—"}
-					/>
-				</SectionCard>
-
-				<SectionCard title="Transaction Information">
-					<div className="flex items-center justify-between gap-4 py-3 text-c1 sm:text-b3">
-						<span className="text-muted-foreground">Transaction Hash</span>
-						{/* `min-w-0` lets the 64-char hash truncate inside the card
-						    instead of overflowing it — every external-wallet claim
-						    deposit has one. */}
-						<button
-							type="button"
-							onClick={handleCopy}
-							className="flex min-w-0 items-center gap-1.5 font-semibold text-foreground hover:text-primary-600"
-						>
-							<span className="truncate">{txRef}</span>
-							<Copy className="size-4 shrink-0" aria-hidden="true" />
-						</button>
+		<div className="flex flex-col gap-6">
+			<div className="flex flex-col gap-8">
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+					<div className="flex flex-col gap-1">
+						<h1 className="text-h5 text-foreground sm:text-h4">Reconciliation Details</h1>
+						<span className="text-b3 text-muted-foreground sm:text-b2">
+							{record.paymentReference
+								? `Request ID: #${record.paymentReference}`
+								: RECONCILIATION_TYPE_LABEL[record.transactionType]}
+						</span>
 					</div>
-					<FieldRow label="Network" value="Stellar" />
-					{record.externalAddress && (
-						<FieldRow
-							label="Sender Wallet"
-							value={
-								<span className="max-w-40 truncate sm:max-w-none">{record.externalAddress}</span>
-							}
-						/>
-					)}
-				</SectionCard>
+					<Badge variant={badge.variant} className="self-start">
+						<span className={cn("size-1.5 rounded-full", badge.dot)} aria-hidden="true" />
+						{badge.label}
+					</Badge>
+				</div>
 
-				<SectionCard title="Reconciliation Outcome">
-					<p className="py-3 text-c1 text-muted-foreground sm:text-b3">
-						{OUTCOME_MESSAGE[displayStatus]}
-						{displayStatus === "amount_mismatch" && difference !== null && difference !== 0 && (
-							<>
-								{" "}
-								{difference < 0
-									? `The customer underpaid by ${formatUsdc(-difference)} ${record.currency}. Follow up with them for the balance.`
-									: `The customer overpaid by ${formatUsdc(difference)} ${record.currency}. You may want to refund the extra.`}
-							</>
+				<div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-x-12">
+					<Section title="Payment Information">
+						<FieldRow label="Transaction Type" value={RECONCILIATION_TYPE_LABEL[record.transactionType]} />
+						{record.paymentReference && <FieldRow label="Request ID" value={`#${record.paymentReference}`} />}
+						{record.customerReference && <FieldRow label="Customer Reference" value={record.customerReference} />}
+						{(record.customerName || record.customerEmail) && (
+							<FieldRow label="Customer" value={record.customerName ?? record.customerEmail} />
 						)}
-					</p>
-					<FieldRow
-						label="Transaction ID"
-						value={<span className="max-w-40 truncate sm:max-w-none">{record.transactionId}</span>}
-					/>
-					{record.stellarTxHash && (
-						<div className="flex items-center justify-between gap-4 py-3 text-c1 sm:text-b3">
-							<span className="text-muted-foreground">Stellar Explorer Link</span>
-							<a
-								href={stellarExplorerUrl(record.stellarTxHash)}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="font-semibold text-primary-600 hover:underline"
-							>
-								explorer link
-							</a>
-						</div>
-					)}
-				</SectionCard>
+						<FieldRow
+							label="Payment Method"
+							value={request ? (request.kind === "request" ? "Request Link" : "Payment Link") : "Direct transfer"}
+						/>
+						{request && <FieldRow label="Request Title" value={request.title} />}
+						{expected !== null && <FieldRow label="Expected Amount" value={`${formatUsdc(expected)} USDC`} />}
+						{request && <FieldRow label="Request Created" value={formatTransactionDate(request.createdAt)} />}
+					</Section>
+
+					<Section title={isPayment ? "Received Payment" : RECONCILIATION_TYPE_LABEL[record.transactionType]}>
+						<FieldRow
+							label={record.transactionType === "refund" ? "Refund Amount" : "Received Amount"}
+							value={`${formatUsdc(received)} ${record.asset}`}
+						/>
+						{difference !== null && (
+							<FieldRow
+								label={difference < 0 ? "Short By" : difference > 0 ? "Overpaid By" : "Difference"}
+								value={`${formatUsdc(Math.abs(difference))} ${record.asset}`}
+								valueClassName={difference !== 0 ? "text-destructive" : undefined}
+							/>
+						)}
+						{record.paymentStatus && (
+							<FieldRow
+								label="Payment Status"
+								value={STATUS_LABEL[record.paymentStatus]}
+								valueClassName={record.paymentStatus === "completed" ? "text-success-700" : undefined}
+							/>
+						)}
+						{refundStatusLabel(record.refundStatus) && (
+							<FieldRow label="Refund Status" value={refundStatusLabel(record.refundStatus)} />
+						)}
+						<FieldRow label="Date" value={formatTransactionDate(record.transactionDate)} />
+					</Section>
+
+					<Section title="Transaction Information">
+						{record.stellarTxHash && <CopyField label="Transaction Hash" value={record.stellarTxHash} />}
+						<FieldRow label="Network" value="Stellar Testnet" />
+						{record.counterpartyAddress && (
+							<FieldRow
+								label={record.transactionType === "refund" ? "Recipient Wallet" : "Sender Wallet"}
+								value={<span className="max-w-40 truncate sm:max-w-none">{record.counterpartyAddress}</span>}
+							/>
+						)}
+					</Section>
+
+					<Section title="Reconciliation Outcome">
+						<p className="mb-2 rounded-xl bg-primary-100/60 p-4 text-c1 text-muted-foreground sm:text-b3">
+							{record.reconciliationStatus === "unmatched" && record.paymentRequestId
+								? "This payment arrived for the request above, but it couldn't be matched to it automatically."
+								: OUTCOME_MESSAGE[record.reconciliationStatus]}
+							{difference !== null && difference !== 0 && (
+								<>
+									{" "}
+									{difference < 0
+										? `The customer underpaid by ${formatUsdc(-difference)} ${record.asset}. Request the balance from them.`
+										: `The customer overpaid by ${formatUsdc(difference)} ${record.asset}. You may want to refund the extra.`}
+								</>
+							)}
+						</p>
+						<CopyField label="Reference" value={record.reference} />
+						{record.stellarTxHash && (
+							<FieldRow
+								label="Stellar Explorer Link"
+								value={
+									<a
+										href={stellarExplorerUrl(record.stellarTxHash)}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="font-medium text-info-600 hover:underline"
+									>
+										explorer link
+									</a>
+								}
+							/>
+						)}
+						{needsReview(record) && <ResolveFlagForm record={record} />}
+					</Section>
+				</div>
 			</div>
+
+			{(underpaid || canRefund) && (
+				<div className="flex flex-col gap-3 sm:flex-row">
+					{underpaid && (
+						<Button asChild size="large" className="w-full sm:flex-1">
+							<Link href="/payment-requests/create">Request another payment</Link>
+						</Button>
+					)}
+					{canRefund && (
+						<Button asChild size="large" variant="outline" className="w-full sm:flex-1">
+							<Link href={`/refunds/${record.reference}`}>Refund this payment</Link>
+						</Button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

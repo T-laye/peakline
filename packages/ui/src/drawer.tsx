@@ -54,7 +54,7 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
 			<DrawerPrimitive.Content
 				data-slot="drawer-content"
 				className={cn(
-					"fixed inset-x-0 bottom-0 z-50 flex max-h-[90vh] flex-col gap-6 rounded-t-2xl bg-background p-5 pt-3 outline-none",
+					"fixed inset-x-0 bottom-0 z-50 flex max-h-[90vh] flex-col gap-6 rounded-t-2xl bg-background p-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] outline-none",
 					className,
 				)}
 				{...props}
@@ -63,7 +63,7 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
 					aria-hidden="true"
 					className="mx-auto -mt-1 mb-1 h-1 w-9 shrink-0 rounded-full bg-neutral-200"
 				/>
-				<div className="flex flex-col gap-6 overflow-y-auto">{children}</div>
+				<div className="flex min-h-0 flex-col gap-6 overflow-y-auto">{children}</div>
 			</DrawerPrimitive.Content>
 		</DrawerPortal>
 	);

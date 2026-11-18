@@ -44,11 +44,20 @@ const PIN_LENGTH = 6;
 
 type Step = "form" | "confirm" | "authorized" | "processing" | "success" | "failed";
 
-function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
+function SummaryRow({ label, value, nowrap }: { label: string; value: React.ReactNode; nowrap?: boolean }) {
 	return (
 		<div className="flex items-start justify-between gap-4 text-c1 sm:text-b3">
-			<span className="shrink-0 text-muted-foreground">{label}</span>
-			<span className="min-w-0 text-right font-semibold wrap-break-word text-foreground">{value}</span>
+			{/* With a one-line value (an address), the label is what wraps. */}
+			<span className={nowrap ? "min-w-0 text-muted-foreground" : "shrink-0 text-muted-foreground"}>{label}</span>
+			<span
+				className={
+					nowrap
+						? "shrink-0 text-right font-semibold whitespace-nowrap text-foreground"
+						: "min-w-0 text-right font-semibold wrap-break-word text-foreground"
+				}
+			>
+				{value}
+			</span>
 		</div>
 	);
 }
@@ -231,7 +240,7 @@ function InitiateRefundDialog({
 
 	return (
 		<ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
-			<ResponsiveDialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+			<ResponsiveDialogContent className="sm:max-w-xl">
 				{(step === "form" || step === "confirm" || step === "authorized") && (
 					<ResponsiveDialogHeader>
 						<ResponsiveDialogTitle>
@@ -324,13 +333,15 @@ function InitiateRefundDialog({
 								)}
 							/>
 
-							<SummaryRow label="Customer's original payment wallet" value={maskWallet(payerAddress)} />
+							<SummaryRow label="Customer's original payment wallet" value={maskWallet(payerAddress)} nowrap />
 							<RefundSummary type={type} amount={amount} reason={reason} />
 							{error && <Alert variant="error">{error}</Alert>}
 
-							<Button type="submit" size="large" className="w-full" loading={createRefund.isPending}>
-								Confirm
-							</Button>
+							<div className="sticky bottom-0 z-10 -mx-1 bg-background px-1 pt-3 pb-2 sm:-bottom-8 sm:-mb-8 sm:pb-8">
+								<Button type="submit" size="large" className="w-full" loading={createRefund.isPending}>
+									Confirm
+								</Button>
+							</div>
 						</form>
 					</Form>
 				)}
@@ -338,7 +349,7 @@ function InitiateRefundDialog({
 				{step === "confirm" && (
 					<div className="flex flex-col gap-5">
 						<div className="flex flex-col gap-4 rounded-xl border border-secondary-300 bg-secondary-100 p-4 sm:p-5">
-							<SummaryRow label="Recipient (original payer)" value={maskWallet(recipient)} />
+							<SummaryRow label="Recipient (original payer)" value={maskWallet(recipient)} nowrap />
 							<SummaryRow label="You are refunding" value={`${formatUsdc(summaryAmount)} USDC`} />
 							{refund?.reason && <SummaryRow label="Reason" value={refund.reason} />}
 							<SummaryRow label="Network" value="Stellar Testnet" />
@@ -373,7 +384,7 @@ function InitiateRefundDialog({
 						</div>
 						{error && <Alert variant="error">{error}</Alert>}
 
-						<div className="flex flex-col gap-3 sm:flex-row-reverse">
+						<div className="sticky bottom-0 z-10 -mx-1 bg-background px-1 pt-3 pb-2 sm:-bottom-8 sm:-mb-8 sm:pb-8 flex flex-col gap-3 sm:flex-row-reverse">
 							<Button
 								type="button"
 								size="large"
@@ -404,7 +415,7 @@ function InitiateRefundDialog({
 							{error ?? "There isn't enough USDC in your business balance to send this refund."} Top up your
 							wallet, then retry — no PIN needed.
 						</Alert>
-						<div className="flex flex-col gap-3 sm:flex-row-reverse">
+						<div className="sticky bottom-0 z-10 -mx-1 bg-background px-1 pt-3 pb-2 sm:-bottom-8 sm:-mb-8 sm:pb-8 flex flex-col gap-3 sm:flex-row-reverse">
 							<Button type="button" size="large" className="w-full" loading={executeRefund.isPending} onClick={handleExecute}>
 								Retry refund
 							</Button>

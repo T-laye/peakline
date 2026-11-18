@@ -8,6 +8,7 @@ import { MobileStepHeader } from "@/features/wallet/components/MobileStepHeader"
 import { PageHeader } from "@/components/layouts/PageHeader";
 import { PaymentLinkDetailCard } from "@/features/merchant/components/PaymentLinkDetailCard";
 import { PaymentLinkCreatedCard } from "@/features/merchant/components/PaymentLinkCreatedCard";
+import { PaymentLinkPaymentsCard } from "@/features/merchant/components/PaymentLinkPaymentsCard";
 import { useMerchantPaymentLink } from "@/features/merchant/hooks";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
 
@@ -52,6 +53,9 @@ export default function PaymentLinkDetailPage() {
 					<PaymentLinkDetailCard link={link} />
 					<PaymentLinkCreatedCard link={link.url} title="Payment Link" />
 				</div>
+			)}
+			{link && (
+				<PaymentLinkPaymentsCard linkId={link.id} />
 			)}
 		</div>
 	);

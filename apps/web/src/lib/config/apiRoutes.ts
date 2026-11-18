@@ -102,11 +102,34 @@ export const apiRoutes = {
 		DASHBOARD_STATS: "/api/v1/merchant/dashboard/stats",
 		RECONCILIATION: "/api/v1/merchant/reconciliation",
 		RECONCILIATION_SUMMARY: "/api/v1/merchant/reconciliation/summary",
-		reconciliationById: (txId: string) => `/api/v1/merchant/reconciliation/${txId}`,
+		RECONCILIATION_EXPORT_CSV: "/api/v1/merchant/reconciliation/export.csv",
+		/** `reference` = payment transaction id, refund id, or flag id. */
+		reconciliationByReference: (reference: string) =>
+			`/api/v1/merchant/reconciliation/${reference}`,
+		REPORT_SUMMARY: "/api/v1/merchant/reports/summary",
+		REPORT_SUMMARY_CSV: "/api/v1/merchant/reports/summary.csv",
+		REPORT_ACTIVITY: "/api/v1/merchant/reports/activity",
+		REPORT_PAYMENT_METHODS: "/api/v1/merchant/reports/payment-methods",
+		REPORT_CUSTOMERS: "/api/v1/merchant/reports/customers",
+	},
+
+	refunds: {
+		BASE: "/api/v1/refunds",
+		ELIGIBLE_PAYMENTS: "/api/v1/refunds/eligible-payments",
+		byId: (id: string) => `/api/v1/refunds/${id}`,
+		authorize: (id: string) => `/api/v1/refunds/${id}/authorize`,
+		execute: (id: string) => `/api/v1/refunds/${id}/execute`,
+		cancel: (id: string) => `/api/v1/refunds/${id}/cancel`,
 	},
 
 	transfers: {
 		SEND: "/api/v1/transfers/send",
+		/** Same body as SEND minus the PIN; nothing is signed or debited. */
+		PREVIEW: "/api/v1/transfers/preview",
+		/** Settle a transfer stuck in `processing` without paying twice. */
+		recheck: (id: string) => `/api/v1/transfers/${id}/recheck`,
+		/** Failed transfers only, once; needs the PIN. */
+		retry: (id: string) => `/api/v1/transfers/${id}/retry`,
 		// Not wired yet — `POST /transfers/send`'s own response already
 		// carries what the Send flow's Success step needs (transactionId,
 		// type, amount, stellarTxHash, recipientLabel); nothing currently
@@ -121,6 +144,12 @@ export const apiRoutes = {
 		EXPORT_CSV: "/api/v1/payment-links/export.csv",
 		byId: (id: string) => `/api/v1/payment-links/${id}`,
 		byIdCancel: (id: string) => `/api/v1/payment-links/${id}/cancel`,
+		byIdPayments: (id: string) => `/api/v1/payment-links/${id}/payments`,
+		byIdQr: (id: string) => `/api/v1/payment-links/${id}/qr`,
+		/** Customer requests only: outstanding / completed / expired / cancelled. */
+		COLLECTIONS: "/api/v1/payment-links/collections",
+		FLAGS: "/api/v1/payment-links/flags",
+		resolveFlag: (flagId: string) => `/api/v1/payment-links/flags/${flagId}/resolve`,
 	},
 
 	// Public — no auth, used by whoever is *paying* a link, not the
@@ -132,6 +161,8 @@ export const apiRoutes = {
 		// and the backend checks it on Horizon. Confirmed in /docs-json — see
 		// `PaymentLinkClaimData` for the full contract.
 		claim: (code: string) => `/api/v1/pay/${code}/claim`,
+		/** "I've paid": report a tx hash directly (no claim needed). */
+		paymentHash: (code: string) => `/api/v1/pay/${code}/payment-hash`,
 		claimVerify: (code: string, claimId: string) =>
 			`/api/v1/pay/${code}/claim/${claimId}/verify`,
 	},

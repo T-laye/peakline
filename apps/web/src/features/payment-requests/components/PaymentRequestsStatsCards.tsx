@@ -2,7 +2,7 @@
 
 import { Skeleton } from "@repo/ui/skeleton";
 import { formatUsdc } from "@/lib/currency";
-import { usePaymentRequestStats } from "@/features/payment-requests/hooks";
+import { usePaymentRequestCollections } from "@/features/payment-requests/hooks";
 
 function StatCard({ label, value }: { label: string; value: number }) {
 	return (
@@ -13,9 +13,11 @@ function StatCard({ label, value }: { label: string; value: number }) {
 	);
 }
 
-/** Outstanding collection value hero card + the four count cards, per mock. */
+/** Outstanding collection value + four count cards, from
+ * `GET /payment-links/collections` (customer requests only). "Pending"
+ * here is the API's `outstanding` bucket: pending, processing or flagged. */
 function PaymentRequestsStatsCards() {
-	const { data } = usePaymentRequestStats();
+	const { data } = usePaymentRequestCollections();
 
 	if (!data) {
 		return (
@@ -30,19 +32,21 @@ function PaymentRequestsStatsCards() {
 		);
 	}
 
+	const total = data.outstanding.count + data.completed.count + data.expired.count + data.cancelled.count;
+
 	return (
 		<div className="flex flex-col gap-4">
 			<div className="flex flex-col gap-2 rounded-2xl border border-border bg-background p-5 sm:gap-3 sm:p-6">
 				<span className="text-b3 text-muted-foreground sm:text-b2">Outstanding collection value</span>
 				<span className="text-h4 text-foreground sm:text-h3">
-					{formatUsdc(Number(data.outstandingAmount))} USDC
+					{formatUsdc(Number(data.outstanding.amount))} USDC
 				</span>
 			</div>
 			<div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-				<StatCard label="Total requests" value={data.total} />
-				<StatCard label="Pending requests" value={data.pending} />
-				<StatCard label="Paid requests" value={data.paid} />
-				<StatCard label="Expired requests" value={data.expired} />
+				<StatCard label="Total requests" value={total} />
+				<StatCard label="Pending requests" value={data.outstanding.count} />
+				<StatCard label="Paid requests" value={data.completed.count} />
+				<StatCard label="Expired requests" value={data.expired.count} />
 			</div>
 		</div>
 	);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2 } from "lucide-react";
 import { Button } from "@repo/ui/button";
@@ -50,7 +50,7 @@ function CreatePaymentLinkForm({ onCreated }: CreatePaymentLinkFormProps) {
 			reference: "",
 		},
 	});
-	const amount = Number(form.watch("amount"));
+	const amount = Number(useWatch({ control: form.control, name: "amount" }));
 	const amountValid = amount > 0 && !form.formState.errors.amount;
 
 	function handleSubmit(values: CreatePaymentLinkValues) {

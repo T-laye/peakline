@@ -42,3 +42,7 @@ dev-server.log
 # script) — was accidentally committed as a broken submodule reference
 # (no .gitmodules) in the initial create-turbo commit.
 .turbo-clone-temp/
+
+# /brag launch-video output
+brag-output*/
+brag/

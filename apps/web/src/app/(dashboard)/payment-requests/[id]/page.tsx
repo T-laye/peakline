@@ -11,17 +11,25 @@ import { MobileStepHeader } from "@/features/wallet/components/MobileStepHeader"
 import { PageHeader } from "@/components/layouts/PageHeader";
 import { PaymentLinkCreatedCard } from "@/features/merchant/components/PaymentLinkCreatedCard";
 import { PaymentRequestDetailCard } from "@/features/payment-requests/components/PaymentRequestDetailCard";
-import { useCancelPaymentRequest, usePaymentRequest } from "@/features/payment-requests/hooks";
+import { PaymentLinkPaymentsCard } from "@/features/merchant/components/PaymentLinkPaymentsCard";
+import {
+	useCancelPaymentRequest,
+	usePaymentRequest,
+	usePaymentRequestPayments,
+} from "@/features/payment-requests/hooks";
+import { CANCELLABLE_STATUSES } from "@/components/PaymentLinkStatusPill";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
 
-/** c3 mock. "Cancel request" only for still-pending requests (the brief:
- * cancelling can't reverse an on-chain payment). "View associated payment
- * transaction" only once a transaction is linked. */
+/** c3 mock. "Cancel request" while pending/flagged/expired (the API's own
+ * rule; it can't reverse an on-chain payment). "View associated payment
+ * transaction" once a credited payment is attributed to the request. */
 export default function PaymentRequestDetailPage() {
 	const params = useParams<{ id: string }>();
 	const router = useRouter();
 	const { data: request, isLoading, isError, error } = usePaymentRequest(params.id);
 	const cancelRequest = useCancelPaymentRequest();
+	const { data: payments } = usePaymentRequestPayments(params.id);
+	const transactionId = payments?.find((p) => p.transactionId)?.transactionId ?? null;
 
 	function handleCancel() {
 		if (!request) return;
@@ -32,7 +40,7 @@ export default function PaymentRequestDetailPage() {
 	}
 
 	const cancelButton =
-		request?.status === "pending" ? (
+		request && CANCELLABLE_STATUSES.includes(request.status) ? (
 			<Button
 				type="button"
 				variant="outline"
@@ -70,13 +78,14 @@ export default function PaymentRequestDetailPage() {
 						<PaymentRequestDetailCard request={request} />
 						<div className="flex flex-col gap-4 lg:self-start">
 							<PaymentLinkCreatedCard link={request.url} title="Payment Link" inlineQr />
+							<PaymentLinkPaymentsCard linkId={request.id} />
 						</div>
 					</div>
 
 					<div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-						{request.transactionId && (
+						{transactionId && (
 							<Button asChild variant="outline" size="large" className="rounded-full">
-								<Link href={`/transactions/${request.transactionId}`}>
+								<Link href={`/transactions/${transactionId}`}>
 									View associated payment transaction
 								</Link>
 							</Button>

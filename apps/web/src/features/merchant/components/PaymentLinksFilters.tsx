@@ -5,12 +5,11 @@ import { Input } from "@repo/ui/input";
 import { Select } from "@repo/ui/select";
 import { Button } from "@repo/ui/button";
 import type { PaymentLinkStatus } from "@/lib/api/types";
+import { PAYMENT_LINK_STATUS_OPTIONS } from "@/components/PaymentLinkStatusPill";
 
 const STATUS_OPTIONS: { value: PaymentLinkStatus | "all"; label: string }[] = [
 	{ value: "all", label: "All statuses" },
-	{ value: "active", label: "Active" },
-	{ value: "expired", label: "Expired" },
-	{ value: "cancelled", label: "Cancelled" },
+	...PAYMENT_LINK_STATUS_OPTIONS,
 ];
 
 interface PaymentLinksFiltersProps {
@@ -54,7 +53,7 @@ function PaymentLinksFilters({
 				<Input
 					value={search}
 					onChange={(e) => onSearchChange(e.target.value)}
-					placeholder="Search by payment title"
+					placeholder="Search by title or reference"
 					aria-label="Search payment links by title"
 					className="pl-10"
 				/>

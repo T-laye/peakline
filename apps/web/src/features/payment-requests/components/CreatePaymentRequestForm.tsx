@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
@@ -25,18 +25,21 @@ import {
 } from "@/features/payment-requests/hooks";
 import { formatUsdc, usdcToGhs } from "@/lib/currency";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
-import type { PaymentRequestData } from "@/lib/api/types";
+import type { CustomerCollectionData, PaymentLinkData } from "@/lib/api/types";
+
+const customerKey = (c: CustomerCollectionData) => c.customerEmail ?? c.customerName ?? "";
 
 interface CreatePaymentRequestFormProps {
-	onCreated: (request: PaymentRequestData) => void;
+	onCreated: (request: PaymentLinkData) => void;
 }
 
 /**
- * Per the c2 mock: customer selection (an existing customer, or "New
- * customer"), name + email, amount, then optional description / due date /
- * customer reference. Picking an existing customer fills and locks name +
- * email; "New customer" leaves them editable. The mock's selection field
- * shows a calendar icon — treated as a mock slip and rendered as a select.
+ * Per the c2 mock: customer selection (customers you've requested from
+ * before, via `GET /merchant/reports/customers`, or "New customer"), name +
+ * email, a title (required by the API, absent from the mock), amount, then
+ * optional description / due date / customer reference. Sending customer
+ * fields is what makes the API create a single-use request. The mock's
+ * selection field shows a calendar icon — treated as a mock slip.
  */
 function CreatePaymentRequestForm({ onCreated }: CreatePaymentRequestFormProps) {
 	const { data: customers = [] } = usePaymentRequestCustomers();
@@ -47,22 +50,23 @@ function CreatePaymentRequestForm({ onCreated }: CreatePaymentRequestFormProps) 
 			customerId: "",
 			customerName: "",
 			customerEmail: "",
+			title: "",
 			amount: "" as unknown as number,
 			description: "",
 			dueDate: "",
 			reference: "",
 		},
 	});
-	const customerId = form.watch("customerId");
+	const customerId = useWatch({ control: form.control, name: "customerId" });
 	const isExistingCustomer = !!customerId && customerId !== NEW_CUSTOMER;
-	const amount = Number(form.watch("amount"));
+	const amount = Number(useWatch({ control: form.control, name: "amount" }));
 	const amountValid = amount > 0 && !form.formState.errors.amount;
 
 	function handleCustomerChange(id: string) {
 		form.setValue("customerId", id, { shouldValidate: form.formState.isSubmitted });
-		const customer = customers.find((c) => c.id === id);
-		form.setValue("customerName", customer?.name ?? "");
-		form.setValue("customerEmail", customer?.email ?? "");
+		const customer = customers.find((c) => customerKey(c) === id);
+		form.setValue("customerName", customer?.customerName ?? "");
+		form.setValue("customerEmail", customer?.customerEmail ?? "");
 		if (form.formState.isSubmitted) void form.trigger(["customerName", "customerEmail"]);
 	}
 
@@ -98,8 +102,9 @@ function CreatePaymentRequestForm({ onCreated }: CreatePaymentRequestFormProps) 
 										Select customer
 									</option>
 									{customers.map((customer) => (
-										<option key={customer.id} value={customer.id}>
-											{customer.name}
+										<option key={customerKey(customer)} value={customerKey(customer)}>
+											{customer.customerName ?? customer.customerEmail}
+											{customer.customerName && customer.customerEmail ? ` (${customer.customerEmail})` : ""}
 										</option>
 									))}
 									<option value={NEW_CUSTOMER}>+ New customer</option>
@@ -137,6 +142,20 @@ function CreatePaymentRequestForm({ onCreated }: CreatePaymentRequestFormProps) 
 									disabled={isExistingCustomer}
 									{...field}
 								/>
+							</FormControl>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+
+				<FormField
+					control={form.control}
+					name="title"
+					render={({ field }) => (
+						<FormItem>
+							<FormLabel>Request title</FormLabel>
+							<FormControl>
+								<Input placeholder="e.g. Custom order" {...field} />
 							</FormControl>
 							<FormMessage />
 						</FormItem>

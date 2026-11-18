@@ -4,8 +4,14 @@ import Link from "next/link";
 import { Eye, FileText } from "lucide-react";
 import { EmptyState } from "@repo/ui/empty-state";
 import { formatUsdc } from "@/lib/currency";
-import type { PaymentRequestData } from "@/lib/api/types";
-import { PaymentRequestStatusPill, formatRequestDate } from "./PaymentRequestStatusPill";
+import type { PaymentLinkData } from "@/lib/api/types";
+import { PaymentLinkStatusPill as PaymentRequestStatusPill } from "@/components/PaymentLinkStatusPill";
+
+/** "12 Aug 2026". */
+function formatRequestDate(iso: string | null | undefined) {
+	if (!iso) return "—";
+	return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
 
 function CardRow({ label, value }: { label: string; value: React.ReactNode }) {
 	return (
@@ -16,7 +22,7 @@ function CardRow({ label, value }: { label: string; value: React.ReactNode }) {
 	);
 }
 
-function ViewLink({ request }: { request: PaymentRequestData }) {
+function ViewLink({ request }: { request: PaymentLinkData }) {
 	return (
 		<Link
 			href={`/payment-requests/${request.id}`}
@@ -30,7 +36,7 @@ function ViewLink({ request }: { request: PaymentRequestData }) {
 
 /** Desktop table inside the mock's "Recent requests" card; stacked cards on
  * mobile, same convention as `PaymentLinksTable`. */
-function PaymentRequestsTable({ requests }: { requests: PaymentRequestData[] }) {
+function PaymentRequestsTable({ requests }: { requests: PaymentLinkData[] }) {
 	if (requests.length === 0) {
 		return (
 			<EmptyState
@@ -69,12 +75,12 @@ function PaymentRequestsTable({ requests }: { requests: PaymentRequestData[] }) 
 							{requests.map((request) => (
 								<tr key={request.id} className="border-t border-border hover:bg-muted/50">
 									<td className="p-4 text-b3 font-medium text-foreground">#{request.reference}</td>
-									<td className="p-4 text-b3 text-foreground">{request.customer.name}</td>
+									<td className="p-4 text-b3 text-foreground">{(request.customerName ?? request.customerEmail ?? "—")}</td>
 									<td className="p-4 text-b3 whitespace-nowrap text-foreground">
 										{formatUsdc(Number(request.amount))} {request.currency}
 									</td>
 									<td className="p-4 text-b3 whitespace-nowrap text-foreground">
-										{formatRequestDate(request.dueAt)}
+										{formatRequestDate(request.expiresAt)}
 									</td>
 									<td className="p-4 text-b3 whitespace-nowrap text-foreground">
 										{formatRequestDate(request.createdAt)}
@@ -97,12 +103,12 @@ function PaymentRequestsTable({ requests }: { requests: PaymentRequestData[] }) 
 				{requests.map((request) => (
 					<div key={request.id} className="flex flex-col gap-3 rounded-xl border border-border p-4">
 						<CardRow label="Request ID" value={`#${request.reference}`} />
-						<CardRow label="Customer" value={request.customer.name} />
+						<CardRow label="Customer" value={(request.customerName ?? request.customerEmail ?? "—")} />
 						<CardRow
 							label="Amount (USDC)"
 							value={`${formatUsdc(Number(request.amount))} ${request.currency}`}
 						/>
-						<CardRow label="Due Date" value={formatRequestDate(request.dueAt)} />
+						<CardRow label="Due Date" value={formatRequestDate(request.expiresAt)} />
 						<CardRow label="Status" value={<PaymentRequestStatusPill status={request.status} />} />
 						<div className="flex justify-end">
 							<ViewLink request={request} />

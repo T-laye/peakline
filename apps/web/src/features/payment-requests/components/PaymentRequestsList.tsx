@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Skeleton } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/sonner";
 import { Pagination } from "@/components/Pagination";
@@ -10,7 +11,7 @@ import {
 	type PaymentRequestsQuery,
 } from "@/features/payment-requests/hooks";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
-import type { PaymentRequestStatus } from "@/lib/api/types";
+import type { PaymentLinkStatus as PaymentRequestStatus } from "@/lib/api/types";
 import { PaymentRequestsStatsCards } from "./PaymentRequestsStatsCards";
 import { PaymentRequestsFilters } from "./PaymentRequestsFilters";
 import { PaymentRequestsTable } from "./PaymentRequestsTable";
@@ -19,7 +20,9 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 /** `/payment-requests` — same structure as `PaymentLinksList`. */
 function PaymentRequestsList() {
-	const [search, setSearch] = useState("");
+	// `?q=` lets other screens (e.g. Customers) open this list pre-filtered.
+	const searchParams = useSearchParams();
+	const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
 	const [from, setFrom] = useState("");
 	const [to, setTo] = useState("");
 	const [status, setStatus] = useState<PaymentRequestStatus | "all">("all");

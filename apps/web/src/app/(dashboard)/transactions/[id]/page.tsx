@@ -6,6 +6,7 @@ import { Skeleton } from "@repo/ui/skeleton";
 import { EmptyState } from "@repo/ui/empty-state";
 import { MobileStepHeader } from "@/features/wallet/components/MobileStepHeader";
 import { TransactionDetail } from "@/features/transactions/components/TransactionDetail";
+import { TransactionRecoveryActions } from "@/features/transactions/components/TransactionRecoveryActions";
 import { useTransaction } from "@/features/transactions/hooks";
 import { useAuthStore } from "@/lib/stores/authStore";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
@@ -63,7 +64,10 @@ export default function TransactionDetailPage() {
 					description={getApiErrorMessage(error, "It may have been removed, or the link is out of date.")}
 				/>
 			) : (
-				<TransactionDetail transaction={transaction} />
+				<>
+					<TransactionDetail transaction={transaction} />
+					<TransactionRecoveryActions transaction={transaction} />
+				</>
 			)}
 		</div>
 	);

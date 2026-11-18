@@ -285,8 +285,15 @@ axiosAuth.interceptors.response.use(
 			| (InternalAxiosRequestConfig & { _retry?: boolean })
 			| undefined;
 
+		// A wrong transaction PIN is a 401 too, but the session is fine:
+		// refreshing and replaying would re-send the same wrong PIN, counting
+		// twice toward the 5-try lockout. Let the form handle it.
+		const isPinError =
+			(error.response?.data as { code?: string } | undefined)?.code === "INVALID_PIN";
+
 		if (
 			error.response?.status === 401 &&
+			!isPinError &&
 			originalRequest &&
 			!originalRequest._retry
 		) {

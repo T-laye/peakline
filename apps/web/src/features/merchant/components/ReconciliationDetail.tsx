@@ -1,41 +1,43 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Copy, SearchX } from "lucide-react";
-import { Button } from "@repo/ui/button";
-import { Skeleton } from "@repo/ui/skeleton";
-import { EmptyState } from "@repo/ui/empty-state";
 import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
+import { EmptyState } from "@repo/ui/empty-state";
+import { Input } from "@repo/ui/input";
+import { Skeleton } from "@repo/ui/skeleton";
 import { cn } from "@repo/ui/lib/utils";
 import { toast } from "@repo/ui/sonner";
 import {
-	displayReconciliationStatus,
-	reconciliationDifference,
-	reconciliationExpectedAmount,
-	reconciliationMethodLabel,
-	reconciliationRequestId,
-	reconciliationTitle,
 	RECONCILIATION_STATUS_BADGE,
+	RECONCILIATION_TYPE_LABEL,
+	needsReview,
+	refundStatusLabel,
 } from "@/lib/reconciliation";
 import { STATUS_LABEL, formatTransactionDate } from "@/lib/transactions";
 import { formatUsdc } from "@/lib/currency";
 import { stellarExplorerUrl } from "@/lib/stellar";
-import { useReconciliationRecord } from "@/features/merchant/hooks";
+import { describeFlagReason } from "@/lib/stellarIssues";
+import {
+	useMerchantPaymentLink,
+	useOpenFlagFor,
+	useReconciliationRecord,
+	useResolveFlag,
+} from "@/features/merchant/hooks";
 import { getApiErrorMessage } from "@/lib/api/errorMessage";
+import type { ReconciliationData, ReconciliationStatus } from "@/lib/api/types";
 
-const DOT_CLASS: Record<string, string> = {
-	completed: "bg-success-600",
-	failed: "bg-danger-600",
-	pending: "bg-warning-600",
-};
-
-const OUTCOME_MESSAGE: Record<ReturnType<typeof displayReconciliationStatus>, string> = {
-	matched: "This payment was confirmed and matched to its request — fully reconciled.",
+const OUTCOME_MESSAGE: Record<ReconciliationStatus, string> = {
+	matched: "This record is tied to its request or confirmed payout — fully reconciled.",
 	unmatched: "This payment was confirmed, but no matching request was found for it.",
+	flagged: "This payment needs manual review before it can be considered reconciled.",
 	amount_mismatch:
 		"The payment is confirmed and credited to your wallet, but the amount received differs from what was requested.",
-	failed: "This payment attempt failed and was never credited.",
-	pending: "This payment hasn't settled yet — there's nothing to reconcile until it does.",
+	failed: "This attempt failed and was never credited.",
+	pending: "This refund is still in flight. It reconciles once Stellar confirms it.",
+	reviewed: "This flagged payment was reviewed and resolved.",
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -90,33 +92,68 @@ function CopyField({ label, value }: { label: string; value: string }) {
 	);
 }
 
+/** "Mark as reviewed" — resolves the open flag behind a flagged payment
+ * (`POST /payment-links/flags/{flagId}/resolve`). */
+function ResolveFlagForm({ record }: { record: ReconciliationData }) {
+	const { data: flag, isLoading } = useOpenFlagFor(record);
+	const resolveFlag = useResolveFlag();
+	const [note, setNote] = useState("");
+
+	if (isLoading) return <Skeleton className="h-11 w-full" />;
+	if (!flag) return null;
+
+	function handleResolve() {
+		if (!flag || note.trim().length < 3) return;
+		resolveFlag.mutate(
+			{ flagId: flag.id, note: note.trim() },
+			{
+				onSuccess: () => toast.success("Marked as reviewed"),
+				onError: (error) => toast.error(getApiErrorMessage(error, "Couldn't resolve this flag")),
+			},
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-2 pt-2">
+			<span className="text-c1 text-muted-foreground sm:text-b3">Flag reason: {describeFlagReason(flag.reason)}</span>
+			<div className="flex flex-col gap-2 sm:flex-row">
+				<Input
+					value={note}
+					onChange={(e) => setNote(e.target.value)}
+					placeholder="Review note, e.g. customer confirmed by phone"
+					aria-label="Review note"
+				/>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={handleResolve}
+					disabled={note.trim().length < 3}
+					loading={resolveFlag.isPending}
+					className="shrink-0"
+				>
+					Mark as reviewed
+				</Button>
+			</div>
+		</div>
+	);
+}
+
 /**
- * Reconciliation's own detail page — real data throughout, adjusted from
- * the mock where real fields don't exist:
- * - No "Customer Reference" exists on either match object (confirmed live:
- *   `ReconciliationPaymentLinkData` has no `customerReference` field at
- *   all) — omitted rather than shown blank.
- * - No "Merchant Wallet" field exists on this endpoint (it would need a
- *   separate business/wallet lookup this page doesn't otherwise need) —
- *   omitted rather than guessed.
- * - "Sender Wallet" uses the real `externalAddress` field (the mock's own
- *   version showed the request title there by mistake).
- * - "Reconciliation Outcome" is a real message derived from the actual
- *   status, not placeholder copy.
- * - "Request another payment" (v3 mock) only shows when the customer
- *   underpaid — the only case where collecting more makes sense.
+ * Reconciliation Details (v3 mock + v3 API). Request title and expected
+ * amount come from the linked payment request when there is one; the
+ * record itself carries customer, references, statuses and addresses.
+ * Actions: resolve an open review flag, request the shortfall when the
+ * customer underpaid, or start a refund for a payment.
  */
-function ReconciliationDetail({ txId }: { txId: string }) {
-	const { data: record, isLoading, isError, error } = useReconciliationRecord(txId);
+function ReconciliationDetail({ reference }: { reference: string }) {
+	const { data: record, isLoading, isError, error } = useReconciliationRecord(reference);
+	const { data: request } = useMerchantPaymentLink(record?.paymentRequestId ?? "");
 
 	if (isLoading) {
 		return (
 			<div className="flex flex-col gap-4">
 				<Skeleton className="h-16 w-full rounded-2xl" />
-				<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-					<Skeleton className="h-64 w-full rounded-2xl" />
-					<Skeleton className="h-64 w-full rounded-2xl" />
-				</div>
+				<Skeleton className="h-80 w-full rounded-2xl" />
 			</div>
 		);
 	}
@@ -127,20 +164,18 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 				<EmptyState
 					icon={SearchX}
 					title="Reconciliation record not found"
-					description={getApiErrorMessage(error, "It may have been removed, or the id is wrong.")}
+					description={getApiErrorMessage(error, "It may have been removed, or the reference is wrong.")}
 				/>
 			</div>
 		);
 	}
 
-	const displayStatus = displayReconciliationStatus(record);
-	const badge = RECONCILIATION_STATUS_BADGE[displayStatus];
-	const expected = reconciliationExpectedAmount(record);
+	const badge = RECONCILIATION_STATUS_BADGE[record.reconciliationStatus];
 	const received = Number(record.amount);
-	const difference = reconciliationDifference(record);
-	const requestId = reconciliationRequestId(record);
-	const txRef = record.stellarTxHash ?? record.transactionId;
-
+	const expected = request ? Number(request.amount) : null;
+	const isPayment = record.transactionType === "payment";
+	const difference = expected !== null && isPayment ? received - expected : null;
+	const canRefund = isPayment && record.paymentStatus === "completed" && record.refundStatus !== "refunded";
 	const underpaid = difference !== null && difference < 0;
 
 	return (
@@ -150,71 +185,85 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 					<div className="flex flex-col gap-1">
 						<h1 className="text-h5 text-foreground sm:text-h4">Reconciliation Details</h1>
 						<span className="text-b3 text-muted-foreground sm:text-b2">
-							{requestId ? `Request ID: #${requestId}` : reconciliationTitle(record)}
+							{record.paymentReference
+								? `Request ID: #${record.paymentReference}`
+								: RECONCILIATION_TYPE_LABEL[record.transactionType]}
 						</span>
 					</div>
 					<Badge variant={badge.variant} className="self-start">
-						<span className={cn("size-1.5 rounded-full", DOT_CLASS[badge.variant])} aria-hidden="true" />
+						<span className={cn("size-1.5 rounded-full", badge.dot)} aria-hidden="true" />
 						{badge.label}
 					</Badge>
 				</div>
 
 				<div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-x-12">
 					<Section title="Payment Information">
-						<FieldRow label="Transaction Type" value="Payment" />
-						{requestId && <FieldRow label="Request ID" value={`#${requestId}`} />}
-						<FieldRow label="Payment Method" value={reconciliationMethodLabel(record)} />
-						{record.paymentLink && <FieldRow label="Request Title" value={record.paymentLink.title} />}
-						{expected && (
-							<FieldRow label="Expected Amount" value={`${formatUsdc(Number(expected))} USDC`} />
+						<FieldRow label="Transaction Type" value={RECONCILIATION_TYPE_LABEL[record.transactionType]} />
+						{record.paymentReference && <FieldRow label="Request ID" value={`#${record.paymentReference}`} />}
+						{record.customerReference && <FieldRow label="Customer Reference" value={record.customerReference} />}
+						{(record.customerName || record.customerEmail) && (
+							<FieldRow label="Customer" value={record.customerName ?? record.customerEmail} />
 						)}
-						<FieldRow label="Request Created" value={formatTransactionDate(record.createdAt)} />
+						<FieldRow
+							label="Payment Method"
+							value={request ? (request.kind === "request" ? "Request Link" : "Payment Link") : "Direct transfer"}
+						/>
+						{request && <FieldRow label="Request Title" value={request.title} />}
+						{expected !== null && <FieldRow label="Expected Amount" value={`${formatUsdc(expected)} USDC`} />}
+						{request && <FieldRow label="Request Created" value={formatTransactionDate(request.createdAt)} />}
 					</Section>
 
-					<Section title="Received Payment">
-						<FieldRow label="Received Amount" value={`${formatUsdc(received)} ${record.currency}`} />
+					<Section title={isPayment ? "Received Payment" : RECONCILIATION_TYPE_LABEL[record.transactionType]}>
+						<FieldRow
+							label={record.transactionType === "refund" ? "Refund Amount" : "Received Amount"}
+							value={`${formatUsdc(received)} ${record.asset}`}
+						/>
 						{difference !== null && (
 							<FieldRow
 								label={difference < 0 ? "Short By" : difference > 0 ? "Overpaid By" : "Difference"}
-								value={`${formatUsdc(Math.abs(difference))} ${record.currency}`}
+								value={`${formatUsdc(Math.abs(difference))} ${record.asset}`}
 								valueClassName={difference !== 0 ? "text-destructive" : undefined}
 							/>
 						)}
-						<FieldRow
-							label="Payment Status"
-							value={STATUS_LABEL[record.status]}
-							valueClassName={record.status === "completed" ? "text-success-700" : undefined}
-						/>
-						<FieldRow
-							label="Payment Date"
-							value={record.completedAt ? formatTransactionDate(record.completedAt) : "—"}
-						/>
+						{record.paymentStatus && (
+							<FieldRow
+								label="Payment Status"
+								value={STATUS_LABEL[record.paymentStatus]}
+								valueClassName={record.paymentStatus === "completed" ? "text-success-700" : undefined}
+							/>
+						)}
+						{refundStatusLabel(record.refundStatus) && (
+							<FieldRow label="Refund Status" value={refundStatusLabel(record.refundStatus)} />
+						)}
+						<FieldRow label="Date" value={formatTransactionDate(record.transactionDate)} />
 					</Section>
 
 					<Section title="Transaction Information">
-						<CopyField label="Transaction Hash" value={txRef} />
+						{record.stellarTxHash && <CopyField label="Transaction Hash" value={record.stellarTxHash} />}
 						<FieldRow label="Network" value="Stellar Testnet" />
-						{record.externalAddress && (
+						{record.counterpartyAddress && (
 							<FieldRow
-								label="Sender Wallet"
-								value={<span className="max-w-40 truncate sm:max-w-none">{record.externalAddress}</span>}
+								label={record.transactionType === "refund" ? "Recipient Wallet" : "Sender Wallet"}
+								value={<span className="max-w-40 truncate sm:max-w-none">{record.counterpartyAddress}</span>}
 							/>
 						)}
 					</Section>
 
 					<Section title="Reconciliation Outcome">
 						<p className="mb-2 rounded-xl bg-primary-100/60 p-4 text-c1 text-muted-foreground sm:text-b3">
-							{OUTCOME_MESSAGE[displayStatus]}
-							{displayStatus === "amount_mismatch" && difference !== null && difference !== 0 && (
+							{record.reconciliationStatus === "unmatched" && record.paymentRequestId
+								? "This payment arrived for the request above, but it couldn't be matched to it automatically."
+								: OUTCOME_MESSAGE[record.reconciliationStatus]}
+							{difference !== null && difference !== 0 && (
 								<>
 									{" "}
 									{difference < 0
-										? `The customer underpaid by ${formatUsdc(-difference)} ${record.currency}. Request the balance from them.`
-										: `The customer overpaid by ${formatUsdc(difference)} ${record.currency}. You may want to refund the extra.`}
+										? `The customer underpaid by ${formatUsdc(-difference)} ${record.asset}. Request the balance from them.`
+										: `The customer overpaid by ${formatUsdc(difference)} ${record.asset}. You may want to refund the extra.`}
 								</>
 							)}
 						</p>
-						<CopyField label="Transaction ID" value={record.transactionId} />
+						<CopyField label="Reference" value={record.reference} />
 						{record.stellarTxHash && (
 							<FieldRow
 								label="Stellar Explorer Link"
@@ -230,16 +279,24 @@ function ReconciliationDetail({ txId }: { txId: string }) {
 								}
 							/>
 						)}
+						{needsReview(record) && <ResolveFlagForm record={record} />}
 					</Section>
 				</div>
 			</div>
 
-			{/* c7: an underpaid request needs the balance collected — start a
-			    new payment request for it. */}
-			{underpaid && (
-				<Button asChild size="large" className="w-full">
-					<Link href="/payment-requests/create">Request another payment</Link>
-				</Button>
+			{(underpaid || canRefund) && (
+				<div className="flex flex-col gap-3 sm:flex-row">
+					{underpaid && (
+						<Button asChild size="large" className="w-full sm:flex-1">
+							<Link href="/payment-requests/create">Request another payment</Link>
+						</Button>
+					)}
+					{canRefund && (
+						<Button asChild size="large" variant="outline" className="w-full sm:flex-1">
+							<Link href={`/refunds/${record.reference}`}>Refund this payment</Link>
+						</Button>
+					)}
+				</div>
 			)}
 		</div>
 	);

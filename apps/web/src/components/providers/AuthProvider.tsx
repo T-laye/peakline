@@ -74,6 +74,15 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		if (!business?.id || walletCheckedForId.current === business.id) return;
 		walletCheckedForId.current = business.id;
+		// Once per browser session, not once per full page load — an existing
+		// wallet answers 409 every time, which is harmless but noisy.
+		const storageKey = `pl_business_wallet_checked:${business.id}`;
+		try {
+			if (sessionStorage.getItem(storageKey)) return;
+			sessionStorage.setItem(storageKey, "1");
+		} catch {
+			// Storage unavailable (private mode etc.) — fall back to every load.
+		}
 		createBusinessWallet.mutate(business.id);
 		// `createBusinessWallet` is a fresh mutation object every render (the
 		// usual TanStack Query shape) — depending on it would refire this on

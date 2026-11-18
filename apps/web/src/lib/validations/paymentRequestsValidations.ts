@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-/** `customerId` is either an existing customer's id or `NEW_CUSTOMER`, in
- * which case the name (and optionally email) typed below are used. */
+/** `customerId` picks an existing customer (by their key in the dropdown) or
+ * `NEW_CUSTOMER`, in which case the name (and optionally email) typed below
+ * are used. */
 export const NEW_CUSTOMER = "new";
 
 export const createPaymentRequestSchema = z.object({
@@ -10,6 +11,7 @@ export const createPaymentRequestSchema = z.object({
 	customerEmail: z
 		.union([z.literal(""), z.string().trim().email("Enter a valid email address")])
 		.optional(),
+	title: z.string().trim().min(1, "Enter a title for this request").max(80, "Title is too long"),
 	amount: z.coerce
 		.number({ message: "Enter an amount" })
 		.positive("Enter an amount greater than 0"),

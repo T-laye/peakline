@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
@@ -31,7 +32,9 @@ export default function PaymentRequestsPage() {
 					Create Payment Request
 				</Link>
 			</Button>
-			<PaymentRequestsList />
+			<Suspense>
+				<PaymentRequestsList />
+			</Suspense>
 		</div>
 	);
 }

@@ -18,11 +18,14 @@ import type { AdminPaymentLinkStatus } from "@/lib/api/types";
 
 const STATUS_BADGE: Record<
 	AdminPaymentLinkStatus,
-	{ variant: "completed" | "failed" | "cancelled"; dot: string; label: string }
+	{ variant: "pending" | "processing" | "completed" | "failed" | "cancelled"; dot: string; label: string }
 > = {
-	active: { variant: "completed", dot: "bg-success-600", label: "Active" },
+	pending: { variant: "pending", dot: "bg-warning-600", label: "Pending" },
+	processing: { variant: "processing", dot: "bg-info-600", label: "Processing" },
+	paid: { variant: "completed", dot: "bg-success-600", label: "Paid" },
 	expired: { variant: "failed", dot: "bg-danger-600", label: "Expired" },
 	cancelled: { variant: "cancelled", dot: "bg-neutral-400", label: "Cancelled" },
+	flagged: { variant: "failed", dot: "bg-danger-600", label: "Flagged" },
 };
 
 function PaymentLinkDetail({ id }: { id: string }) {

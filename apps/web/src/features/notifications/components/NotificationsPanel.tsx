@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Bell, Check, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@repo/ui/dialog";
 import { Skeleton } from "@repo/ui/skeleton";
@@ -29,7 +30,33 @@ function relativeTime(iso: string) {
 	return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-function NotificationRow({ notification }: { notification: NotificationData }) {
+/** Deep link for a notification, from its `type` and `data` ids
+ * (frontend-integration.md §8). `null` = nothing to open. */
+function notificationHref(notification: NotificationData): string | null {
+	const data = (notification.data ?? {}) as Record<string, unknown>;
+	const id = (key: string) => (typeof data[key] === "string" ? (data[key] as string) : null);
+	switch (notification.type) {
+		case "payment_link_paid":
+			return id("transactionId") ? `/reconciliation/${id("transactionId")}` : null;
+		case "payment_flagged":
+			return "/reconciliation";
+		case "refund_completed":
+		case "refund_failed":
+			return id("refundId") ? `/refunds/r/${id("refundId")}` : "/refunds";
+		case "payment_failed":
+			return id("transactionId") ? `/transactions/${id("transactionId")}` : null;
+		default:
+			return null;
+	}
+}
+
+function NotificationRow({
+	notification,
+	onNavigate,
+}: {
+	notification: NotificationData;
+	onNavigate: () => void;
+}) {
 	const markRead = useMarkNotificationRead();
 	const deleteOne = useDeleteNotification();
 	const isUnread = !notification.readAt;
@@ -52,8 +79,29 @@ function NotificationRow({ notification }: { notification: NotificationData }) {
 				aria-hidden="true"
 			/>
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="text-b3 font-semibold text-foreground">{notification.title}</span>
-				<span className="text-c1 text-muted-foreground">{notification.body}</span>
+				{(() => {
+					const href = notificationHref(notification);
+					const content = (
+						<>
+							<span className="text-b3 font-semibold text-foreground">{notification.title}</span>
+							<span className="text-c1 text-muted-foreground">{notification.body}</span>
+						</>
+					);
+					return href ? (
+						<Link
+							href={href}
+							onClick={() => {
+								if (isUnread) markRead.mutate(notification.id);
+								onNavigate();
+							}}
+							className="flex flex-col gap-0.5 hover:underline"
+						>
+							{content}
+						</Link>
+					) : (
+						content
+					);
+				})()}
 				<span className="text-c2 text-muted-foreground">{relativeTime(notification.createdAt)}</span>
 			</div>
 			<div className="flex shrink-0 items-center gap-1">
@@ -139,7 +187,7 @@ function NotificationsPanel({
 						/>
 					) : (
 						data.map((notification) => (
-							<NotificationRow key={notification.id} notification={notification} />
+							<NotificationRow key={notification.id} notification={notification} onNavigate={() => onOpenChange(false)} />
 						))
 					)}
 				</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 /** Chrome/Edge/Android's install-prompt event — not yet in lib.dom.d.ts,
  * so declared by hand. */
@@ -18,24 +18,38 @@ interface BeforeInstallPromptEvent extends Event {
  * `canInstall` staying false there is expected, not a bug; the account
  * page's own copy explains the manual path for that case.
  */
+const STANDALONE_QUERY = "(display-mode: standalone)";
+
+function subscribeStandalone(onChange: () => void) {
+	const media = window.matchMedia(STANDALONE_QUERY);
+	media.addEventListener("change", onChange);
+	return () => media.removeEventListener("change", onChange);
+}
+
+function isStandalone() {
+	return (
+		window.matchMedia(STANDALONE_QUERY).matches ||
+		(window.navigator as { standalone?: boolean }).standalone === true
+	);
+}
+
 function useInstallPrompt() {
 	const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
 		null,
 	);
-	const [installed, setInstalled] = useState(false);
+	// Already running as an installed app — read from the browser rather
+	// than copied into state inside an effect; `false` on the server.
+	const standalone = useSyncExternalStore(subscribeStandalone, isStandalone, () => false);
+	const [installedNow, setInstalledNow] = useState(false);
+	const installed = standalone || installedNow;
 
 	useEffect(() => {
-		const isStandalone =
-			window.matchMedia("(display-mode: standalone)").matches ||
-			(window.navigator as { standalone?: boolean }).standalone === true;
-		setInstalled(isStandalone);
-
 		function handleBeforeInstallPrompt(e: Event) {
 			e.preventDefault();
 			setDeferredPrompt(e as BeforeInstallPromptEvent);
 		}
 		function handleAppInstalled() {
-			setInstalled(true);
+			setInstalledNow(true);
 			setDeferredPrompt(null);
 		}
 

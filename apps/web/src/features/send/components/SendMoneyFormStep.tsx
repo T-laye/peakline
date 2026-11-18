@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Search, X } from "lucide-react";
 import { isValidPhoneNumber } from "libphonenumber-js/min";
@@ -99,9 +99,9 @@ function SendMoneyFormStep({ defaultValues, onContinue }: SendMoneyFormStepProps
 			note: defaultValues?.note ?? "",
 		},
 	});
-	const method = form.watch("method");
-	const recipient = form.watch("recipient");
-	const amount = Number(form.watch("amount"));
+	const method = useWatch({ control: form.control, name: "method" });
+	const recipient = useWatch({ control: form.control, name: "recipient" });
+	const amount = Number(useWatch({ control: form.control, name: "amount" }));
 	const amountValid = amount > 0 && !form.formState.errors.amount;
 
 	// Only enabled once the typed value is a syntactically complete phone

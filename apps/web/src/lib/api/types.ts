@@ -23,6 +23,11 @@ export interface ApiErrorResponse {
 	error?: string;
 	message?: string | string[];
 	code?: string;
+	/** `details.issues`: machine-readable reasons on 422s from refunds and
+	 * transfers (e.g. `destination_missing_usdc_trustline`). */
+	details?: { issues?: string[] } & Record<string, unknown>;
+	/** Show in support dialogs. */
+	requestId?: string;
 	path?: string;
 	timestamp?: string;
 }
@@ -326,7 +331,9 @@ export type TransactionType =
 	| "withdrawal"
 	| "internal_transfer"
 	| "conversion"
-	| "withdrawal_ghs";
+	| "withdrawal_ghs"
+	/** Outgoing refund to a customer (v3). */
+	| "refund";
 
 export type TransactionLedgerStatus =
 	| "pending"
@@ -431,8 +438,12 @@ export interface DashboardPendingData {
  * (real response as of 2026-09-13; previously a single `value`, received-only). */
 export interface DashboardBucketData {
 	label: string;
+	/** Payments received. */
 	inflow: string;
+	/** Withdrawals and transfers out, refunds excluded. */
 	outflow: string;
+	/** Completed refunds. */
+	refunds: string;
 }
 
 export interface DashboardChartData {
@@ -440,6 +451,7 @@ export interface DashboardChartData {
 	currency: string;
 	totalInflow: string;
 	totalOutflow: string;
+	totalRefunds: string;
 	buckets: DashboardBucketData[];
 }
 
@@ -457,67 +469,98 @@ export interface MerchantDashboardStatsData {
 	todaysPayments: DashboardMoneyData;
 	todaySent: DashboardMoneyData;
 	pending: DashboardPendingData;
+	/** v3 additions (all-time). */
+	refundsCompleted: DashboardMoneyData;
+	/** Payments received minus completed refunds. */
+	netCollections: DashboardMoneyData;
+	/** Total USDC moved: received + sent. */
+	usdcVolume: DashboardMoneyData;
+	/** Unpaid customer requests: pending, processing or flagged. */
+	outstandingRequests: DashboardPendingData;
+	/** Settled (paid) customer requests. */
+	completedCollections: DashboardPendingData;
+	/** Refunds that are requested, authorized or processing. */
+	pendingRefunds: DashboardPendingData;
 	chart: DashboardChartData;
 }
 
-/** `reconciliationStatus` on `ReconciliationData` — confirmed live via
- * `GET /merchant/reconciliation`. Distinct from the transaction's own
- * `status` (pending/processing/completed/failed/reversed): a still-settling
- * deposit has no reconciliation verdict yet at all, it isn't a 5th value of
- * this enum — see `deriveReconciliationStatus`. */
-export type ReconciliationStatus = "matched" | "unmatched" | "failed" | "amount_mismatch";
+/** `reconciliationStatus` (v3 API). `flagged`/`amount_mismatch` = open
+ * review flag, `reviewed` = resolved flag, `pending` = refund in flight. */
+export type ReconciliationStatus =
+	| "matched"
+	| "unmatched"
+	| "flagged"
+	| "amount_mismatch"
+	| "failed"
+	| "pending"
+	| "reviewed";
 
-export interface ReconciliationPaymentLinkData {
-	id: string;
-	title: string;
-	expectedAmount: string;
-	publicCode: string;
-}
+export type ReconciliationTransactionType = "payment" | "refund" | "unmatched_payment";
 
-export interface ReconciliationFundingIntentData {
-	id: string;
-	expectedAmount: string;
-	memo: string;
-}
-
-/** `GET /merchant/reconciliation`, `GET /merchant/reconciliation/{txId}` —
- * confirmed live. One deposit transaction plus whatever it matched against.
- * Neither `paymentLink` nor `fundingIntent` carries a customer name or
- * identity — a payer is only ever a wallet address (`externalAddress`) or,
- * for an internal Peakline-to-Peakline deposit, resolvable via the
- * transaction's own `counterparty` (not included in this DTO; cross-
- * reference `TransactionData` by `transactionId` if that's ever needed). */
+/** `GET /merchant/reconciliation`, `GET /merchant/reconciliation/{reference}`
+ * (v3 shape). One record per payment, refund, or never-credited flagged
+ * payment. */
 export interface ReconciliationData {
-	transactionId: string;
+	/** Payment transaction id, refund id, or flag id (unmatched_payment). */
+	reference: string;
+	transactionType: ReconciliationTransactionType;
+	businessId: string;
+	/** Payment request / link this payment settles. */
+	paymentRequestId?: string | null;
+	/** Merchant-visible reference of that request (PK-...). */
+	paymentReference?: string | null;
+	customerReference?: string | null;
+	customerName?: string | null;
+	customerEmail?: string | null;
 	amount: string;
-	currency: string;
-	status: TransactionLedgerStatus;
-	reconciliationStatus: ReconciliationStatus;
+	asset: string;
+	/** Ledger status of a payment. Null for refunds and uncredited payments. */
+	paymentStatus?: TransactionLedgerStatus | null;
+	/** Payment: pending | partially_refunded | refunded. Refund: its own status. */
+	refundStatus?: string | null;
 	stellarTxHash?: string | null;
-	externalAddress?: string | null;
-	failureReason?: string | null;
-	createdAt: string;
-	completedAt?: string | null;
-	paymentLink?: ReconciliationPaymentLinkData | null;
-	fundingIntent?: ReconciliationFundingIntentData | null;
+	/** Payer address (payments) or recipient address (refunds). */
+	counterpartyAddress?: string | null;
+	/** Completion time, or creation time while not completed. */
+	transactionDate: string;
+	reconciliationStatus: ReconciliationStatus;
 }
 
-/** `GET /merchant/reconciliation/summary` — confirmed live. Counts only, no
- * amount totals — there's no single call that sums e.g. every matched
- * deposit's amount (see `MerchantStatsCards`'s own note on the same gap
- * showing up elsewhere). */
 export interface ReconciliationSummaryData {
 	matched: number;
 	unmatched: number;
+	flagged: number;
 	amountMismatch: number;
 	failed: number;
+	pending: number;
+	reviewed: number;
 	total: number;
 }
 
 export interface ReconciliationQuery {
 	status?: ReconciliationStatus;
+	type?: ReconciliationTransactionType;
+	q?: string;
 	from?: string;
 	to?: string;
+}
+
+/** `GET /payment-links/flags` — a payment that could not be matched cleanly
+ * (wrong amount/asset, missing memo, late, duplicate, cancelled request). */
+export interface ReconciliationFlagData {
+	id: string;
+	businessId: string;
+	paymentLinkId?: string | null;
+	reason: string;
+	stellarTxHash: string;
+	amount: string;
+	assetCode?: string | null;
+	fromAddress?: string | null;
+	/** Set when the payment was credited despite the flag. */
+	transactionId?: string | null;
+	resolvedAt?: string | null;
+	note?: string | null;
+	createdAt: string;
 }
 
 export interface PaymentLinkBusinessData {
@@ -525,27 +568,38 @@ export interface PaymentLinkBusinessData {
 	name: string;
 }
 
-/** No "paid" state — a link's derived status only ever tracks whether it
- * can still be used (active), has timed out (expired), or was explicitly
- * cancelled. Whether it's actually been paid is a property of the deposit
- * transaction made against it, not of the link itself. */
-export type PaymentLinkStatus = "active" | "expired" | "cancelled";
+/** v3 lifecycle (reusable links and customer requests share it). `expired`
+ * also covers pending requests past their deadline. `active` is accepted by
+ * the API as a legacy filter alias for `pending` but never returned. */
+export type PaymentLinkStatus = "pending" | "processing" | "paid" | "expired" | "cancelled" | "flagged";
+
+/** `link` = reusable by many payers; `request` = single-use, customer-specific
+ * (created by setting any customer field). */
+export type PaymentLinkKind = "link" | "request";
 
 /** `POST/GET /payment-links`, `GET /payment-links/{id}`,
- * `POST /payment-links/{id}/cancel`. */
+ * `POST /payment-links/{id}/cancel`. Customer payment requests are the same
+ * resource with `kind: "request"`. */
 export interface PaymentLinkData {
 	id: string;
+	/** Unique per business, e.g. "PK-1A2B3C4D". */
+	reference: string;
+	kind: PaymentLinkKind;
 	title: string;
 	/** Decimal string, e.g. "500.00". */
 	amount: string;
 	currency: "USDC";
 	description?: string | null;
 	customerReference?: string | null;
+	customerName?: string | null;
+	customerEmail?: string | null;
+	customerPhone?: string | null;
+	/** Due date / deadline. */
 	expiresAt: string;
 	cancelledAt?: string | null;
+	paidAt?: string | null;
 	status: PaymentLinkStatus;
-	/** The URL slug and the Stellar text memo a payer must attach — same
-	 * value, two purposes. */
+	/** The URL slug and the Stellar text memo a payer must attach. */
 	publicCode: string;
 	/** Full shareable URL, ready to use as-is. */
 	url: string;
@@ -554,19 +608,54 @@ export interface PaymentLinkData {
 	updatedAt: string;
 }
 
-/** `GET /payment-links/stats` — the three header cards on the Payment
- * Links page. */
+/** `GET /payment-links/stats` — counts across links and requests. */
 export interface PaymentLinkStatsData {
 	total: number;
+	pending: number;
+	/** Legacy alias of `pending`. */
 	active: number;
+	processing: number;
+	paid: number;
 	expired: number;
 	cancelled: number;
+	flagged: number;
+}
+
+export interface AmountCountData {
+	/** Decimal string. */
+	amount: string;
+	count: number;
+}
+
+/** `GET /payment-links/collections` — customer requests only. */
+export interface CollectionsOverviewData {
+	/** pending (not past due), processing or flagged. */
+	outstanding: AmountCountData;
+	completed: AmountCountData;
+	expired: AmountCountData;
+	cancelled: AmountCountData;
+}
+
+/** `GET /payment-links/{id}/payments` — on-chain payments attributed to a
+ * link. `processing` = reported and verified, awaiting credit. */
+export interface PaymentLinkPaymentData {
+	id: string;
+	status: "processing" | "matched";
+	stellarTxHash: string;
+	amount: string;
+	fromAddress?: string | null;
+	paidAtChain?: string | null;
+	transactionId?: string | null;
+	createdAt: string;
 }
 
 /** `GET /pay/{code}` — public, no auth. Everything a payer needs to
  * complete payment themselves (destination wallet + the memo that must
  * accompany the Stellar transfer for it to be matched to this link). */
 export interface PublicPaymentLinkData {
+	/** Optional only because `/pay` synthesizes this shape for person
+	 * payments too (see `buildPersonPayTarget`). */
+	reference?: string;
 	title: string;
 	amount: string;
 	currency: "USDC";
@@ -576,17 +665,14 @@ export interface PublicPaymentLinkData {
 	businessName: string;
 	destinationAddress: string;
 	memo: string;
-	/** Not part of the real `GET /pay/{code}` response — that's always a
-	 * business, so `ConfirmPaymentStep`/`PaymentSuccessStep`'s own hardcoded
-	 * "Merchant" label is accurate there. Set explicitly only when `/pay`
-	 * synthesizes this same shape for a QR/link/wallet-address-resolved
-	 * *person* payment instead (see `buildPersonPayTarget`), so those same
-	 * components can show the right label without needing their own
-	 * separate "is this actually a business" branch. */
+	/** SEP-7 payment URI wallets can open. */
+	paymentUri?: string;
+	/** Not part of the real `GET /pay/{code}` response (always a business
+	 * there). Set only when `/pay` synthesizes this shape for a *person*
+	 * payment (see `buildPersonPayTarget`). */
 	recipientRoleLabel?: string;
 	/** Not part of the response either — the code it was looked up by,
-	 * attached by `usePaymentLinkLookup` so the external-wallet claim
-	 * endpoints (`/pay/{code}/claim...`) have it later in the flow. */
+	 * attached by `usePaymentLinkLookup` for the claim endpoints. */
 	publicCode?: string;
 }
 
@@ -625,6 +711,9 @@ export type TransferType = "internal" | "external";
  * "queued" one (no `status` field here, unlike `TransferStatusData`). */
 export interface SendMoneyResponseData {
 	transactionId: string;
+	/** `processing` = Stellar outcome not known yet (e.g. a timeout). Recheck
+	 * with `POST /transfers/{id}/recheck` instead of sending again. */
+	status: "processing" | "completed" | "failed";
 	type: TransferType;
 	amount: string;
 	currency: string;
@@ -658,6 +747,8 @@ export interface TransferStatusData {
 	fee: string;
 	fxEquivalent?: string | null;
 	stellarTxHash?: string | null;
+	/** Why the transfer failed. Null otherwise. */
+	failureReason?: string | null;
 	recipient: TransferRecipientData;
 	newBalance: string;
 	newBalanceFxEquivalent?: string | null;
@@ -666,120 +757,127 @@ export interface TransferStatusData {
 	completedAt?: string | null;
 }
 
-/** Third tranche — merchant payment requests. **No backend yet**: these
- * shapes are the frontend's own best guess (modelled on `PaymentLinkData`
- * and the v3 brief's lifecycle), served by an in-memory mock in
- * `features/payment-requests/hooks`. Reconcile field names against the real
- * API once it lands.
- *
- * Lifecycle per the brief: Pending (awaiting payment) → Processing (payment
- * seen, not yet verified) → Paid (confirmed on Stellar), or Expired (due
- * date passed unpaid) / Cancelled (merchant cancelled unpaid) / Flagged
- * (late, unmatched or wrong-amount payment needing manual review). */
-export type PaymentRequestStatus =
-	| "pending"
-	| "processing"
-	| "paid"
-	| "expired"
-	| "cancelled"
-	| "flagged";
-
-export interface PaymentRequestCustomer {
-	id: string;
-	name: string;
-	email?: string | null;
-}
-
-export interface PaymentRequestData {
-	id: string;
-	/** Human-facing unique reference, e.g. "REQ-1001". */
-	reference: string;
-	/** Shown as the detail card's heading (e.g. "Custom Order"). The create
-	 * mock has no field for it, so it's optional. */
-	title?: string | null;
-	customer: PaymentRequestCustomer;
-	/** Decimal string, e.g. "500.00". */
+/** `POST /transfers/preview` — what the user confirms before signing.
+ * Nothing is signed or debited. */
+export interface TransferPreviewData {
+	type: TransferType;
 	amount: string;
-	currency: "USDC";
-	description?: string | null;
-	/** Merchant's own reference, e.g. "INV-001". */
-	customerReference?: string | null;
-	dueAt?: string | null;
-	status: PaymentRequestStatus;
-	/** Full shareable URL, ready to use as-is. */
-	url: string;
-	/** The confirmed Stellar transaction this request was matched to, once
-	 * paid (or the payment that got it flagged). */
-	transactionId?: string | null;
-	createdAt: string;
-	updatedAt: string;
+	asset: string;
+	/** Stellar network, for external transfers. */
+	network?: "testnet" | "mainnet" | null;
+	/** Username, phone, or full Stellar address. */
+	recipient: string;
+	/** On-chain sends pay a small XLM fee; internal transfers are free. */
+	fee: { amount: string; currency: "XLM" | "USDC" };
+	/** USDC balance after this transfer. */
+	balanceAfter: string;
+	canSend: boolean;
+	/** Why sending would fail (empty when `canSend`). */
+	issues: string[];
 }
 
-export interface PaymentRequestStatsData {
-	total: number;
-	pending: number;
-	paid: number;
-	expired: number;
-	/** Sum of pending + processing request amounts, decimal string. */
-	outstandingAmount: string;
-}
+/* ---- Third tranche: refunds & reporting (v3 API) ---- */
 
-/** Third tranche — refunds. **No backend yet** (mock in
- * `features/refunds/hooks`); shapes follow the v3 brief. Lifecycle:
- * Requested → Authorized → Processing → Completed / Failed. */
 export type RefundStatus = "requested" | "authorized" | "processing" | "completed" | "failed";
-export type RefundType = "full" | "partial";
-export type PaymentMethodKind = "payment_request" | "payment_link" | "qr";
 
+export interface RefundableBalanceData {
+	paymentAmount: string;
+	/** Sum of completed refunds. */
+	refunded: string;
+	/** Sum of refunds still requested/authorized/processing (reserved). */
+	pending: string;
+	remaining: string;
+}
+
+/** `GET /refunds/eligible-payments` — completed payments with a sender
+ * address and something left to refund. */
+export interface EligiblePaymentData {
+	transactionId: string;
+	businessId: string;
+	amount: string;
+	/** Refunds go back here. */
+	payerAddress: string;
+	stellarTxHash?: string | null;
+	paymentLinkId?: string | null;
+	reference?: string | null;
+	customerReference?: string | null;
+	completedAt?: string | null;
+	refundable: RefundableBalanceData;
+}
+
+/** `POST /refunds`, `GET /refunds`, `GET /refunds/{id}`, and the
+ * authorize/execute/cancel actions. */
 export interface RefundData {
 	id: string;
-	paymentId: string;
-	type: RefundType;
-	/** Decimal string. */
+	businessId: string;
+	originalTransactionId: string;
 	amount: string;
-	currency: "USDC";
+	currency: string;
 	reason: string;
+	/** Original payer address. */
+	recipientAddress: string;
 	status: RefundStatus;
-	/** Always the customer's original paying wallet. */
-	destinationWallet: string;
 	stellarTxHash?: string | null;
 	failureReason?: string | null;
-	createdAt: string;
+	ledgerTransactionId?: string | null;
+	authorizedAt?: string | null;
 	completedAt?: string | null;
+	createdAt: string;
+	updatedAt: string;
+	/** Present on detail responses. */
+	refundable?: RefundableBalanceData | null;
 }
 
-/** A verified incoming payment, as seen from Refund Management. */
-export interface RefundablePaymentData {
-	id: string;
-	/** e.g. "TRANS-10-JYPHI01". */
-	reference: string;
-	title: string;
-	customer: { name: string; phone?: string | null };
-	method: PaymentMethodKind;
-	requestReference?: string | null;
-	customerReference?: string | null;
-	expectedAmount: string;
-	/** What was actually received — the refundable ceiling. */
+export interface CreateRefundPayload {
+	originalTransactionId: string;
 	amount: string;
-	currency: "USDC";
-	paymentStatus: "paid";
-	reconciliationStatus: ReconciliationStatus;
-	stellarTxHash: string;
-	customerWallet: string;
-	paidAt: string;
-	/** Sum of completed refunds. */
-	refundedAmount: string;
-	/** Sum of refunds still in flight — reserved against the balance. */
-	pendingRefundAmount: string;
-	/** amount − refunded − pending. */
-	remainingRefundable: string;
-	refunds: RefundData[];
+	reason: string;
+	/** 8-100 chars; resubmitting the same key returns the same refund. */
+	idempotencyKey: string;
 }
 
-export interface RefundStatsData {
-	totalRefundedAmount: string;
-	total: number;
-	completed: number;
-	pending: number;
-	failed: number;
+/** `GET /merchant/reports/summary` (default range: last 30 days). */
+export interface MerchantReportData {
+	from: string;
+	to: string;
+	currency: string;
+	paymentsReceived: AmountCountData;
+	refundsCompleted: AmountCountData;
+	netCollections: string;
+	/** Right now, not range-bound. */
+	outstandingRequests: AmountCountData;
+	completedCollections: AmountCountData;
+	/** Right now, not range-bound. */
+	pendingRefunds: AmountCountData;
+	flaggedPayments: number;
+	unmatchedPayments: number;
+}
+
+/** `GET /merchant/reports/activity`. */
+export interface ActivityBucketData {
+	/** Start of the day, week (Monday) or month, UTC. */
+	periodStart: string;
+	payments: AmountCountData;
+	refunds: AmountCountData;
+	net: string;
+}
+
+export type PaymentMethodKind = "payment_request" | "payment_link" | "funding_intent" | "direct_stellar";
+
+/** `GET /merchant/reports/payment-methods`. */
+export interface PaymentMethodBreakdownData {
+	method: PaymentMethodKind;
+	count: number;
+	amount: string;
+}
+
+/** `GET /merchant/reports/customers` — per-customer request history. */
+export interface CustomerCollectionData {
+	customerName?: string | null;
+	customerEmail?: string | null;
+	requests: number;
+	paidRequests: number;
+	paidAmount: string;
+	outstandingAmount: string;
+	lastRequestAt?: string | null;
 }

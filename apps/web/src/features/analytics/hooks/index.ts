@@ -1,171 +1,160 @@
 import { useQuery } from "@tanstack/react-query";
+import { useAxiosAuth } from "@/hooks/useAxiosAuth";
+import { apiRoutes } from "@/lib/config/apiRoutes";
 import type { ReceivedTrendPeriod } from "@/features/merchant/hooks";
-import { mockPaymentRequests } from "@/features/payment-requests/hooks/mockData";
-import { mockPayments, mockRefunds } from "@/features/refunds/hooks/mockData";
+import type {
+	ActivityBucketData,
+	ApiSuccessResponse,
+	MerchantDashboardStatsData,
+	MerchantReportData,
+	PaymentMethodBreakdownData,
+	PaymentMethodKind,
+} from "@/lib/api/types";
 
 /*
- * Third-tranche reporting (c7 Analytics) — **mock-derived** until the
- * backend's reporting summaries exist (the brief lists "generate merchant
- * reporting summaries" under backend work). Everything here is computed
- * from the payment-request and refund mock stores so the figures stay
- * consistent with those screens. Real-API figures (total received, pending,
- * the two original charts) still come from `features/merchant/hooks`.
+ * Merchant reporting (v3 API, frontend-integration.md §7). All figures are
+ * scoped to the merchant's businesses (personal wallet excluded).
  */
-
-export interface AmountCount {
-	amount: number;
-	count: number;
-}
 
 export interface SeriesPoint {
 	label: string;
 	value: number;
 }
 
-export interface ReportSummary {
-	completedCollections: AmountCount;
-	refundsCompleted: AmountCount;
-	outstandingRequests: AmountCount;
-	qrVolume: AmountCount;
-	paymentLinkVolume: AmountCount;
-	paymentRequestVolume: AmountCount;
-	usdcVolume: AmountCount;
+/** A chart period selector value → an ISO `from` bound (rolling window). */
+function periodFrom(period: ReceivedTrendPeriod) {
+	const days = period === "week" ? 7 : period === "month" ? 30 : 365;
+	return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-function sum<T>(items: T[], amount: (item: T) => string): AmountCount {
-	return { amount: items.reduce((s, i) => s + Number(amount(i)), 0), count: items.length };
+/** Lower bound meaning "all time" for the reports endpoints, which
+ * otherwise default to the last 30 days. */
+const ALL_TIME_FROM = "2020-01-01T00:00:00.000Z";
+
+/** Dashboard stats for a period (cards use the all-time totals; the
+ * refunds chart uses `chart.buckets[].refunds`). */
+function useDashboardStats(period: ReceivedTrendPeriod) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: ["merchant", "dashboard-stats", period],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<MerchantDashboardStatsData>>(
+				apiRoutes.merchant.DASHBOARD_STATS,
+				{ params: { period } },
+			);
+			return data.data;
+		},
+		staleTime: 0,
+		refetchInterval: 30_000,
+	});
 }
 
-function buildSummary(): ReportSummary {
-	const completedRefunds = mockRefunds.filter((r) => r.status === "completed");
-	const byMethod = (method: string) => mockPayments.filter((p) => p.method === method);
-	const payments = sum(mockPayments, (p) => p.amount);
-	const refunds = sum(completedRefunds, (r) => r.amount);
+function usePaymentMethods(from: string) {
+	const axiosAuth = useAxiosAuth();
+
+	return useQuery({
+		queryKey: ["merchant", "report", "payment-methods", from],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<PaymentMethodBreakdownData[]>>(
+				apiRoutes.merchant.REPORT_PAYMENT_METHODS,
+				{ params: { from } },
+			);
+			return data.data;
+		},
+	});
+}
+
+/** All-time amount/count per method, keyed by method. */
+function useAllTimePaymentMethods() {
+	const query = usePaymentMethods(ALL_TIME_FROM);
+	const byMethod = (method: PaymentMethodKind) => {
+		const row = query.data?.find((m) => m.method === method);
+		return { amount: Number(row?.amount ?? 0), count: row?.count ?? 0 };
+	};
+	return { ...query, byMethod: query.data ? byMethod : undefined };
+}
+
+export const METHOD_LABEL: Record<PaymentMethodKind, string> = {
+	payment_request: "Payment Request",
+	payment_link: "Payment Link",
+	funding_intent: "QR",
+	direct_stellar: "Direct",
+};
+
+function usePaymentMethodSeries(period: ReceivedTrendPeriod) {
+	const query = usePaymentMethods(periodFrom(period));
+	const points: SeriesPoint[] | undefined = query.data
+		? (Object.keys(METHOD_LABEL) as PaymentMethodKind[]).map((method) => ({
+				label: METHOD_LABEL[method],
+				value: Number(query.data.find((m) => m.method === method)?.amount ?? 0),
+			}))
+		: undefined;
+	return { ...query, points };
+}
+
+function useRefundSeries(period: ReceivedTrendPeriod) {
+	const query = useDashboardStats(period);
+	const chart = query.data?.chart;
 	return {
-		completedCollections: sum(
-			mockPaymentRequests.filter((r) => r.status === "paid"),
-			(r) => r.amount,
-		),
-		refundsCompleted: refunds,
-		outstandingRequests: sum(
-			mockPaymentRequests.filter((r) => r.status === "pending" || r.status === "processing"),
-			(r) => r.amount,
-		),
-		qrVolume: sum(byMethod("qr"), (p) => p.amount),
-		paymentLinkVolume: sum(byMethod("payment_link"), (p) => p.amount),
-		paymentRequestVolume: sum(byMethod("payment_request"), (p) => p.amount),
-		usdcVolume: { amount: payments.amount + refunds.amount, count: payments.count + refunds.count },
+		...query,
+		total: chart ? Number(chart.totalRefunds) : undefined,
+		points: chart?.buckets.map((b) => ({ label: b.label, value: Number(b.refunds) })),
 	};
 }
 
-function useReportSummary() {
+function formatBucketLabel(iso: string, granularity: "day" | "month") {
+	const d = new Date(iso);
+	return granularity === "month"
+		? d.toLocaleDateString(undefined, { month: "short", timeZone: "UTC" })
+		: d.toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+/** Net collections (payments − refunds) per day, or per month for a year. */
+function useNetSeries(period: ReceivedTrendPeriod) {
+	const axiosAuth = useAxiosAuth();
+	const granularity = period === "year" ? "month" : "day";
+
 	return useQuery({
-		staleTime: 0,
-		queryKey: ["merchant", "report", "summary"],
+		queryKey: ["merchant", "report", "activity", period],
 		queryFn: async () => {
-			await new Promise((r) => setTimeout(r, 300));
-			return buildSummary();
+			const { data } = await axiosAuth.get<ApiSuccessResponse<ActivityBucketData[]>>(
+				apiRoutes.merchant.REPORT_ACTIVITY,
+				{ params: { from: periodFrom(period), granularity } },
+			);
+			const points: SeriesPoint[] = data.data.map((b) => ({
+				label: formatBucketLabel(b.periodStart, granularity),
+				value: Number(b.net),
+			}));
+			return { points, total: points.reduce((sum, p) => sum + p.value, 0) };
 		},
 	});
 }
 
-const DAY = 86_400_000;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** Collections vs refunds for a period, from the report summary. */
+function useCollectionsVsRefunds(period: ReceivedTrendPeriod) {
+	const axiosAuth = useAxiosAuth();
 
-/** Week → last 7 days; month → last 5 weeks; year → 12 months to date. */
-function buckets(period: ReceivedTrendPeriod) {
-	const now = new Date();
-	if (period === "week") {
-		return Array.from({ length: 7 }, (_, i) => {
-			const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i));
-			return { label: WEEKDAYS[start.getDay()]!, start: start.getTime(), end: start.getTime() + DAY };
-		});
-	}
-	if (period === "month") {
-		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-		return Array.from({ length: 5 }, (_, i) => ({
-			label: `Wk ${i + 1}`,
-			start: end - (5 - i) * 7 * DAY,
-			end: end - (4 - i) * 7 * DAY,
-		}));
-	}
-	return Array.from({ length: 12 }, (_, i) => {
-		const start = new Date(now.getFullYear(), i, 1);
-		const end = new Date(now.getFullYear(), i + 1, 1);
-		return { label: MONTHS[i]!, start: start.getTime(), end: end.getTime() };
-	});
-}
-
-function series<T>(items: T[], at: (i: T) => string, amount: (i: T) => string, period: ReceivedTrendPeriod) {
-	return buckets(period).map((b) => ({
-		label: b.label,
-		value: items
-			.filter((i) => {
-				const t = new Date(at(i)).getTime();
-				return t >= b.start && t < b.end;
-			})
-			.reduce((s, i) => s + Number(amount(i)), 0),
-	}));
-}
-
-export type ReportSeriesKind = "refunds" | "outstanding";
-
-function useReportSeries(kind: ReportSeriesKind, period: ReceivedTrendPeriod) {
 	return useQuery({
-		staleTime: 0,
-		queryKey: ["merchant", "report", "series", kind, period],
-		queryFn: async (): Promise<{ total: number; points: SeriesPoint[] }> => {
-			await new Promise((r) => setTimeout(r, 300));
-			const points =
-				kind === "refunds"
-					? series(mockRefunds.filter((r) => r.status === "completed"), (r) => r.createdAt, (r) => r.amount, period)
-					: series(
-							mockPaymentRequests.filter((r) => r.status === "pending" || r.status === "processing"),
-							(r) => r.createdAt,
-							(r) => r.amount,
-							period,
-						);
-			return { total: points.reduce((s, p) => s + p.value, 0), points };
-		},
-	});
-}
-
-export type BreakdownKind = "methods" | "collections_vs_refunds";
-
-function useReportBreakdown(kind: BreakdownKind, period: ReceivedTrendPeriod) {
-	return useQuery({
-		staleTime: 0,
-		queryKey: ["merchant", "report", "breakdown", kind, period],
-		queryFn: async (): Promise<SeriesPoint[]> => {
-			await new Promise((r) => setTimeout(r, 300));
-			const range = buckets(period);
-			const from = range[0]!.start;
-			const inRange = (iso: string) => new Date(iso).getTime() >= from;
-			if (kind === "methods") {
-				const payments = mockPayments.filter((p) => inRange(p.paidAt));
-				const total = (method: string) =>
-					payments.filter((p) => p.method === method).reduce((s, p) => s + Number(p.amount), 0);
-				return [
-					{ label: "QR", value: total("qr") },
-					{ label: "Payment Link", value: total("payment_link") },
-					{ label: "Payment Request", value: total("payment_request") },
-				];
-			}
+		queryKey: ["merchant", "report", "summary", period],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<ApiSuccessResponse<MerchantReportData>>(
+				apiRoutes.merchant.REPORT_SUMMARY,
+				{ params: { from: periodFrom(period) } },
+			);
 			return [
-				{
-					label: "Collections",
-					value: mockPayments.filter((p) => inRange(p.paidAt)).reduce((s, p) => s + Number(p.amount), 0),
-				},
-				{
-					label: "Refunds",
-					value: mockRefunds
-						.filter((r) => r.status === "completed" && inRange(r.createdAt))
-						.reduce((s, r) => s + Number(r.amount), 0),
-				},
-			];
+				{ label: "Collections", value: Number(data.data.paymentsReceived.amount) },
+				{ label: "Refunds", value: Number(data.data.refundsCompleted.amount) },
+			] satisfies SeriesPoint[];
 		},
 	});
 }
 
-export { useReportSummary, useReportSeries, useReportBreakdown };
+export {
+	useDashboardStats,
+	useAllTimePaymentMethods,
+	usePaymentMethodSeries,
+	useRefundSeries,
+	useNetSeries,
+	useCollectionsVsRefunds,
+};

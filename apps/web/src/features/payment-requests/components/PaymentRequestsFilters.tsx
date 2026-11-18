@@ -4,8 +4,8 @@ import { Search, Download } from "lucide-react";
 import { Input } from "@repo/ui/input";
 import { Select } from "@repo/ui/select";
 import { Button } from "@repo/ui/button";
-import type { PaymentRequestStatus } from "@/lib/api/types";
-import { PAYMENT_REQUEST_STATUS_OPTIONS } from "./PaymentRequestStatusPill";
+import type { PaymentLinkStatus as PaymentRequestStatus } from "@/lib/api/types";
+import { PAYMENT_LINK_STATUS_OPTIONS as PAYMENT_REQUEST_STATUS_OPTIONS } from "@/components/PaymentLinkStatusPill";
 
 interface PaymentRequestsFiltersProps {
 	search: string;
@@ -21,8 +21,7 @@ interface PaymentRequestsFiltersProps {
 }
 
 /** Same bar as `PaymentLinksFilters` (mobile shows search + status only).
- * The mock's placeholder says "Search by title", but the table has no
- * title column — search covers customer, request ID and reference instead.
+ * Search is server-side (`q`: title, reference, customer name/email/reference).
  * From/To bound the creation date. */
 function PaymentRequestsFilters({
 	search,
@@ -46,7 +45,7 @@ function PaymentRequestsFilters({
 				<Input
 					value={search}
 					onChange={(e) => onSearchChange(e.target.value)}
-					placeholder="Search by customer, ID or reference"
+					placeholder="Search by title, customer or reference"
 					aria-label="Search payment requests"
 					className="pl-10"
 				/>

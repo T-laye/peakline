@@ -2,36 +2,12 @@
 
 import Link from "next/link";
 import { Eye, Link2 } from "lucide-react";
-import { Badge } from "@repo/ui/badge";
 import { EmptyState } from "@repo/ui/empty-state";
-import { cn } from "@repo/ui/lib/utils";
 import { formatUsdc } from "@/lib/currency";
-import type { PaymentLinkData, PaymentLinkStatus } from "@/lib/api/types";
+import type { PaymentLinkData } from "@/lib/api/types";
+import { PaymentLinkStatusPill as StatusPill } from "@/components/PaymentLinkStatusPill";
 
-// A link's lifecycle isn't a payment's (Pending/Completed/Failed), but the
-// mock's own pills read identically to `StatusBadge`'s dot+pill convention —
-// reusing `Badge`'s existing completed/failed/cancelled color variants for
-// that same look rather than adding a third status vocabulary to the shared
-// component. No "paid" state on the real API — a link only ever tracks
-// active/expired/cancelled (see `PaymentLinkStatus`'s own comment).
-const STATUS_BADGE: Record<
-	PaymentLinkStatus,
-	{ variant: "completed" | "failed" | "cancelled"; dot: string; label: string }
-> = {
-	active: { variant: "completed", dot: "bg-success-600", label: "Active" },
-	expired: { variant: "failed", dot: "bg-danger-600", label: "Expired" },
-	cancelled: { variant: "cancelled", dot: "bg-neutral-400", label: "Cancelled" },
-};
 
-function StatusPill({ status }: { status: PaymentLinkStatus }) {
-	const badge = STATUS_BADGE[status];
-	return (
-		<Badge variant={badge.variant}>
-			<span className={cn("size-1.5 rounded-full", badge.dot)} aria-hidden="true" />
-			{badge.label}
-		</Badge>
-	);
-}
 
 function CardRow({ label, value }: { label: string; value: React.ReactNode }) {
 	return (

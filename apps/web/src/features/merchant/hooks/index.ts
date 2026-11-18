@@ -12,6 +12,7 @@ import type {
 	PaymentLinkStatsData,
 	PaymentLinkStatus,
 	ReconciliationData,
+	ReconciliationFlagData,
 	ReconciliationQuery,
 	ReconciliationSummaryData,
 } from "@/lib/api/types";
@@ -195,7 +196,7 @@ function useMerchantPaymentLinks(query: PaymentLinksQuery, page: number, limit: 
 		queryFn: async () => {
 			const { data } = await axiosAuth.get<
 				ApiSuccessResponse<PaymentLinkData[]> & { meta: PaginationMeta }
-			>(apiRoutes.paymentLinks.BASE, { params: { ...query, page, limit } });
+			>(apiRoutes.paymentLinks.BASE, { params: { ...query, kind: "link", page, limit } });
 			return { links: data.data, meta: data.meta };
 		},
 	});
@@ -293,7 +294,7 @@ function useExportPaymentLinksCsv() {
 	return useMutation({
 		mutationFn: async (query: PaymentLinksQuery) => {
 			const response = await axiosAuth.get<Blob>(apiRoutes.paymentLinks.EXPORT_CSV, {
-				params: query,
+				params: { ...query, kind: "link" },
 				responseType: "blob",
 			});
 			const url = URL.createObjectURL(response.data);
@@ -325,10 +326,7 @@ function useReconciliation(query: ReconciliationQuery, page: number, limit: numb
 	});
 }
 
-/** `GET /merchant/reconciliation/summary` — confirmed live. Counts across
- * every business the merchant owns, not scoped by the list's own filters
- * (no query params on the real endpoint) — same "summary cards don't move
- * when you filter the table" behavior the dashboard stats already have. */
+/** `GET /merchant/reconciliation/summary` — counts across all businesses. */
 function useReconciliationSummary() {
 	const axiosAuth = useAxiosAuth();
 
@@ -343,22 +341,86 @@ function useReconciliationSummary() {
 	});
 }
 
-/** `GET /merchant/reconciliation/{txId}` — confirmed live. Keyed by the
- * underlying transaction's own id, not a separate "reconciliation record
- * id" (there isn't one — a reconciliation record is just a deposit
- * transaction plus its derived match). */
-function useReconciliationRecord(txId: string) {
+/** `GET /merchant/reconciliation/{reference}` — `reference` is the payment
+ * transaction id, refund id, or flag id (for an uncredited payment). */
+function useReconciliationRecord(reference: string) {
 	const axiosAuth = useAxiosAuth();
 
 	return useQuery({
-		queryKey: [...RECONCILIATION_KEY, txId],
+		queryKey: [...RECONCILIATION_KEY, "record", reference],
 		queryFn: async () => {
 			const { data } = await axiosAuth.get<ApiSuccessResponse<ReconciliationData>>(
-				apiRoutes.merchant.reconciliationById(txId),
+				apiRoutes.merchant.reconciliationByReference(reference),
 			);
 			return data.data;
 		},
-		enabled: !!txId,
+		enabled: !!reference,
+	});
+}
+
+/** Blob download of `GET /merchant/reconciliation/export.csv` (same filters
+ * as the list). */
+function useExportReconciliationCsv() {
+	const axiosAuth = useAxiosAuth();
+
+	return useMutation({
+		mutationFn: async (query: ReconciliationQuery) => {
+			const response = await axiosAuth.get<Blob>(apiRoutes.merchant.RECONCILIATION_EXPORT_CSV, {
+				params: query,
+				responseType: "blob",
+			});
+			const url = URL.createObjectURL(response.data);
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download = `reconciliation-${new Date().toISOString().slice(0, 10)}.csv`;
+			anchor.click();
+			URL.revokeObjectURL(url);
+		},
+	});
+}
+
+/** The open review flag behind a flagged reconciliation record. The record
+ * itself doesn't carry the flag id (except an uncredited payment, whose
+ * `reference` *is* the flag id), so match open flags by Stellar hash. */
+function useOpenFlagFor(record: ReconciliationData | undefined) {
+	const axiosAuth = useAxiosAuth();
+	const reviewable =
+		!!record && (record.reconciliationStatus === "flagged" || record.reconciliationStatus === "amount_mismatch");
+
+	return useQuery({
+		queryKey: [...RECONCILIATION_KEY, "flag", record?.reference],
+		queryFn: async () => {
+			const { data } = await axiosAuth.get<
+				ApiSuccessResponse<ReconciliationFlagData[]> & { meta: PaginationMeta }
+			>(apiRoutes.paymentLinks.FLAGS, { params: { state: "open", limit: 100 } });
+			return (
+				data.data.find(
+					(flag) =>
+						flag.id === record!.reference ||
+						(!!record!.stellarTxHash && flag.stellarTxHash === record!.stellarTxHash),
+				) ?? null
+			);
+		},
+		enabled: reviewable,
+	});
+}
+
+function useResolveFlag() {
+	const axiosAuth = useAxiosAuth();
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async ({ flagId, note }: { flagId: string; note: string }) => {
+			const { data } = await axiosAuth.post<ApiSuccessResponse<ReconciliationFlagData>>(
+				apiRoutes.paymentLinks.resolveFlag(flagId),
+				{ note },
+			);
+			return data.data;
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: RECONCILIATION_KEY });
+			queryClient.invalidateQueries({ queryKey: PAYMENT_LINKS_KEY });
+		},
 	});
 }
 
@@ -374,6 +436,9 @@ export {
 	useReconciliation,
 	useReconciliationSummary,
 	useReconciliationRecord,
+	useExportReconciliationCsv,
+	useOpenFlagFor,
+	useResolveFlag,
 	useReceivedTrend,
 };
 export type { MerchantOverviewData, ReceivedTrendPoint, PaymentLinkStatus };
